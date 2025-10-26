@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6fd72fb32f12847d1a630f0d20c7c30c, type: 3}
   m_Name: RoomPrefabSettings
   m_EditorClassIdentifier: DungeonsForProBuilder.Runtime::DungeonsForProBuilder.RoomPrefabSettings
-  roomPrefab: {fileID: 8062690659427411488, guid: ee44bb03254374606b1eb1ea1e3cee02, type: 3}
-  doorPrefab: {fileID: 1339732808470372689, guid: 7d27f1e3d85534399a82e7271cf02cbb, type: 3}
+  roomPrefab: {fileID: 0}
+  doorPrefab: {fileID: 0}
   backDirection: 1
   enableFloor: 1
   floorHeight: 1

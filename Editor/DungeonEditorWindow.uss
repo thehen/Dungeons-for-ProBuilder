@@ -1,0 +1,56 @@
+* {
+    flex-shrink:0;
+}
+
+.row {
+    flex-direction: row;
+    flex-grow: 1;
+    flex-shrink:0;
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 5px;
+}
+
+.w1 {
+    flex-grow: 1;
+}
+
+.w2 {
+    flex-grow: 2;
+}
+
+.w3 {
+    flex-grow: 3;
+}
+
+.w4 {
+    flex-grow: 4;
+}
+
+.w5 {
+    flex-grow: 5;
+}
+
+.section-header {
+    font-size: 14px;
+    font-weight: bold;
+    margin: 8px 0 4px 0;
+    color: rgb(185, 185, 185);
+    -unity-font-style: bold;
+    background-color: rgb(70, 70, 70);
+    padding-top: 5px;
+    padding-right: 5px;
+    padding-bottom: 5px;
+    padding-left: 5px;
+    margin-top: 10px;
+    margin-right: 0;
+    margin-bottom: 10px;
+    margin-left: 0;
+}
+
+.unity-button {
+    padding: 5px;
+}
+
+.dungeon-editor-root {
+}

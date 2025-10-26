@@ -1,0 +1,28 @@
+{
+    "name": "DungeonsForProBuilder.Editor",
+    "rootNamespace": "DungeonsForProBuilderEditor",
+    "references": [
+        "DungeonsForProBuilder.Runtime",
+        "Unity.ProBuilder",
+        "Unity.ProBuilder.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_EDITOR"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.probuilder",
+            "expression": "6.0.7",
+            "define": "UNITY_PROBUILDER_6_0_7_OR_NEWER"
+        }
+    ],
+    "noEngineReferences": false
+}

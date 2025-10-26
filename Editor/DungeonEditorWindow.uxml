@@ -1,0 +1,42 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <Style src="project://database/Packages/com.newfangled.dungeons-for-probuilder/Editor/DungeonEditorWindow.uss?fileID=7433441132597879392&amp;guid=3c35d5bb6fdf3424fbc1b20281377639&amp;type=3#DungeonEditorWindow"/>
+    <engine:VisualElement name="root" class="dungeon-editor-root" style="padding-top: 10px; padding-right: 10px; padding-bottom: 10px; padding-left: 10px;">
+        <engine:VisualElement name="header" class="dungeon-editor-header"/>
+        <engine:VisualElement name="selection-warning" class="warning"/>
+        <engine:VisualElement name="action-buttons" class="action-buttons-row">
+            <engine:Label text="Rooms" class="section-header"/>
+            <engine:VisualElement class="row" style="flex-grow: 1;">
+                <engine:Button name="build-room" text="Build Room" icon-image="project://database/Packages/com.newfangled.dungeons-for-probuilder/Icons/BuildRoomIcon.png?fileID=2800000&amp;guid=7575e4e3a9df54f2eb3c2217f75047b3&amp;type=3#BuildRoomIcon" class="action-button primary-button w1"/>
+                <engine:Button name="reset-room" text="Reset Room" icon-image="project://database/Packages/com.newfangled.dungeons-for-probuilder/Icons/ResetRoom.png?fileID=2800000&amp;guid=f5df6d3be1ba340dfa028afbd6922a39&amp;type=3#ResetRoom" class="action-button danger-button w1"/>
+            </engine:VisualElement>
+        </engine:VisualElement>
+        <engine:VisualElement class="row" style="flex-grow: 1;">
+            <engine:Label text="Room Prefab Settings" name="Label" class="property-label"/>
+            <editor:ObjectField name="settings-field" class="property-field w1"/>
+            <engine:Button name="create-settings" text="Create" class="inline-button"/>
+        </engine:VisualElement>
+        <engine:Foldout name="settings-foldout" text="Room Prefab Settings" value="false" class="section">
+            <engine:VisualElement name="settings-inspector-container"/>
+        </engine:Foldout>
+        <engine:VisualElement name="visibility-section" class="section">
+            <engine:Label text="Room Visibility" class="section-label section-header"/>
+            <engine:VisualElement class="action-buttons-row row">
+                <engine:Button name="show-all-rooms" text="Show All Rooms" class="action-button w1"/>
+                <engine:Button name="hide-all-rooms" text="Hide All Rooms" class="action-button w1"/>
+                <engine:Button name="isolate-room" text="Isolate Selected" class="action-button w1"/>
+            </engine:VisualElement>
+        </engine:VisualElement>
+        <engine:VisualElement name="door-action-buttons" class="action-buttons-row">
+            <engine:Label text="Doors" name="" class="section-label section-header"/>
+            <engine:VisualElement class="row" style="flex-grow: 1;">
+                <engine:Button name="build-door" text="Build Door" icon-image="project://database/Packages/com.newfangled.dungeons-for-probuilder/Icons/DoorIcon.png?fileID=2800000&amp;guid=951f9adef82ca476c82cb3cc2d7af668&amp;type=3#DoorIcon" class="action-button primary-button w1"/>
+                <engine:Button name="reset-door" text="Reset Door" icon-image="project://database/Packages/com.newfangled.dungeons-for-probuilder/Icons/ResetRoom.png?fileID=2800000&amp;guid=f5df6d3be1ba340dfa028afbd6922a39&amp;type=3#ResetRoom" class="action-button danger-button w1"/>
+            </engine:VisualElement>
+        </engine:VisualElement>
+        <engine:VisualElement name="door-warning" class="section"/>
+        <engine:VisualElement name="settings-warning" class="section"/>
+        <engine:VisualElement name="status" class="dungeon-editor-status">
+            <engine:Label name="status-text" text="" class="status-text"/>
+        </engine:VisualElement>
+    </engine:VisualElement>
+</engine:UXML>

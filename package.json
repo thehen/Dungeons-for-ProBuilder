@@ -1,0 +1,27 @@
+{
+  "name": "com.newfangled.dungeons-for-probuilder",
+  "displayName": "Dungeons for ProBuilder",
+  "version": "1.0.0",
+  "unity": "2022.3",
+  "description": "A skeleton Unity package for dungeon editing tools using ProBuilder.",
+  "keywords": [
+    "dungeon",
+    "probuilder",
+    "level design",
+    "editor tools"
+  ],
+  "category": "Tools",
+  "dependencies": {
+    "com.unity.probuilder": "6.0.7"
+  },
+  "author": {
+    "name": "Your Name",
+    "email": "your.email@example.com",
+    "url": "https://github.com/yourusername"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/dungeons-for-probuilder.git"
+  },
+  "license": "MIT"
+}

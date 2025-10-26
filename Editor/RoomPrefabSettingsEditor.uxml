@@ -1,0 +1,68 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <Style src="project://database/Packages/com.newfangled.dungeons-for-probuilder/Editor/RoomPrefabSettingsEditor.uss?fileID=7433441132597879392&amp;guid=9c4fee3790e5a45208241674070dccea&amp;type=3#RoomPrefabSettingsEditor"/>
+    <engine:VisualElement name="root" class="room-settings-root">
+        <engine:Label text="Container Prefabs" class="section-header"/>
+        <engine:VisualElement name="Row" class="row" style="flex-grow: 1;">
+            <engine:VisualElement name="Row" class="row" style="flex-grow: 1;">
+                <engine:Label text="Room Prefab" class="component-name"/>
+                <editor:ObjectField binding-path="roomPrefab" class="prefab-field w1"/>
+            </engine:VisualElement>
+            <engine:VisualElement name="Row" class="w1 row" style="flex-grow: 1;">
+                <engine:Label text="Door Prefab" class="component-name"/>
+                <editor:ObjectField binding-path="doorPrefab" class="prefab-field w1"/>
+            </engine:VisualElement>
+        </engine:VisualElement>
+        <engine:VisualElement name="Row" class="row">
+            <engine:Label text="Back Direction" class="component-name"/>
+            <editor:EnumField binding-path="backDirection" class="back-direction-field w1"/>
+        </engine:VisualElement>
+        <engine:VisualElement name="Row" class="floor-ceiling-section row">
+            <engine:VisualElement name="Row" class="w1 row">
+                <engine:Label text="Floor" class="component-name"/>
+                <engine:Toggle binding-path="enableFloor"/>
+                <engine:Label text="Height:" class="component-name"/>
+                <engine:FloatField binding-path="floorHeight" class="w1"/>
+            </engine:VisualElement>
+            <engine:VisualElement name="Row" class="w1 row">
+                <engine:Label text="Ceiling" class="component-name"/>
+                <engine:Toggle binding-path="enableCeiling"/>
+                <engine:Label text="Height:" class="component-name"/>
+                <engine:FloatField binding-path="ceilingHeight" class="w1"/>
+            </engine:VisualElement>
+        </engine:VisualElement>
+        <engine:Label text="Wall" class="section-header"/>
+        <engine:VisualElement name="Row" class="row">
+            <engine:VisualElement name="Row" class="row" style="flex-grow: 1;">
+                <engine:Label text="Prefab" class="component-name"/>
+                <editor:ObjectField binding-path="wallPrefab" class="prefab-field w1"/>
+            </engine:VisualElement>
+            <engine:VisualElement name="Row" class="row">
+                <engine:Label text="X:" class="axis-label"/>
+                <engine:FloatField binding-path="wallWidth" class="w1"/>
+                <engine:Label text="Y:" class="axis-label"/>
+                <engine:FloatField binding-path="wallHeight" class="w1"/>
+                <engine:Label text="Z:" class="axis-label"/>
+                <engine:FloatField binding-path="wallDepth" class="w1"/>
+                <engine:Label text="+ Back Y:"/>
+                <engine:FloatField binding-path="wallBackHeight" class="w1"/>
+            </engine:VisualElement>
+        </engine:VisualElement>
+        <engine:Label text="Corner" class="section-header"/>
+        <engine:VisualElement name="Row" class="row">
+            <engine:VisualElement name="Row" class="row" style="flex-grow: 1;">
+                <engine:Label text="Prefab" class="component-name"/>
+                <editor:ObjectField binding-path="cornerPrefab" name="ObjectField" class="w1"/>
+            </engine:VisualElement>
+            <engine:VisualElement class="row w1">
+                <engine:Label text="X:" class="axis-label"/>
+                <engine:FloatField binding-path="cornerWidth" class="w1"/>
+                <engine:Label text="Y:" class="axis-label"/>
+                <engine:FloatField binding-path="cornerHeight" class="w1"/>
+                <engine:Label text="Z:" class="axis-label"/>
+                <engine:FloatField binding-path="cornerDepth" class="w1"/>
+                <engine:Label text="+ Back Y:"/>
+                <engine:FloatField binding-path="cornerBackHeight" class="w1"/>
+            </engine:VisualElement>
+        </engine:VisualElement>
+    </engine:VisualElement>
+</engine:UXML>

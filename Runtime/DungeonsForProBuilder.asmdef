@@ -1,0 +1,22 @@
+{
+    "name": "DungeonsForProBuilder.Runtime",
+    "rootNamespace": "DungeonsForProBuilder",
+    "references": [
+        "Unity.ProBuilder"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.probuilder",
+            "expression": "6.0.7",
+            "define": "UNITY_PROBUILDER_6_0_7_OR_NEWER"
+        }
+    ],
+    "noEngineReferences": false
+}

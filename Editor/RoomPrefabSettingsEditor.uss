@@ -47,3 +47,7 @@
 .axis-label {
     width: 20px;
 }
+
+.row .unity-layer-field__label {
+    min-width:50px;
+}

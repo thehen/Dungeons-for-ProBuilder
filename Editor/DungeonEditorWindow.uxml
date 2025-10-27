@@ -35,8 +35,5 @@
         </engine:VisualElement>
         <engine:VisualElement name="door-warning" class="section"/>
         <engine:VisualElement name="settings-warning" class="section"/>
-        <engine:VisualElement name="status" class="dungeon-editor-status">
-            <engine:Label name="status-text" text="" class="status-text"/>
-        </engine:VisualElement>
     </engine:VisualElement>
 </engine:UXML>

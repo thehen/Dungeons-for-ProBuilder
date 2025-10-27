@@ -5,6 +5,7 @@ using UnityEngine.UIElements;
 using UnityEditor.UIElements;
 using UnityEngine.ProBuilder;
 using UnityEngine.ProBuilder.MeshOperations;
+using UnityEngine.ProBuilder.Shapes;
 using DungeonsForProBuilder;
 
 namespace DungeonsForProBuilderEditor
@@ -16,7 +17,6 @@ namespace DungeonsForProBuilderEditor
     {
         private const string SettingsGuidEditorPrefsKey = "DungeonsForPB.RoomPrefabSettingsGUID";
         private VisualElement rootElement;
-        private VisualElement statusElement;
 
         // New UI elements per mockup
         private Button buildRoomButton;
@@ -33,7 +33,6 @@ namespace DungeonsForProBuilderEditor
         private Button createSettingsButton;
         private Foldout settingsFoldout;
         private VisualElement settingsInspectorContainer;
-        private Label statusLabel;
         
         // Door editor elements
         private Button buildDoorButton;
@@ -82,7 +81,6 @@ namespace DungeonsForProBuilderEditor
             rootVisualElement.Add(rootElement);
             
             // Get references to UI elements
-            statusElement = rootElement.Q<VisualElement>("status");
             buildRoomButton = rootElement.Q<Button>("build-room");
             resetRoomButton = rootElement.Q<Button>("reset-room");
             showAllRoomsButton = rootElement.Q<Button>("show-all-rooms");
@@ -95,7 +93,6 @@ namespace DungeonsForProBuilderEditor
             createSettingsButton = rootElement.Q<Button>("create-settings");
             settingsFoldout = rootElement.Q<Foldout>("settings-foldout");
             settingsInspectorContainer = rootElement.Q<VisualElement>("settings-inspector-container");
-            statusLabel = rootElement.Q<Label>("status-text");
             
             // Door editor elements
             buildDoorButton = rootElement.Q<Button>("build-door");
@@ -514,49 +511,48 @@ namespace DungeonsForProBuilderEditor
             foreach (var corner in corners)
             {
                 GameObject cornerPrefab = GetCornerPrefabForDynamicCorner(corner);
-                if (cornerPrefab != null)
+                
+                CornerDirection cornerDirection = DetermineCornerDirection(corner.normal);
+                
+                // Check if this corner is back in its direction and use override settings if enabled
+                bool isBack = backCorners.Contains(corner);
+                float cornerHeight, cornerWidth, cornerDepth;
+                
+                if (isBack)
                 {
-                    CornerDirection cornerDirection = DetermineCornerDirection(corner.normal);
-                    
-                    // Check if this corner is back in its direction and use override settings if enabled
-                    bool isBack = backCorners.Contains(corner);
-                    float cornerHeight, cornerWidth, cornerDepth;
-                    
-                    if (isBack)
+                    // Use back override settings
+                    cornerHeight = GetBackCornerHeight(roomHeight, cornerDirection);
+                    cornerWidth = GetBackCornerWidth(cornerDirection);
+                    cornerDepth = GetBackCornerDepth(cornerDirection);
+                }
+                else
+                {
+                    // Use regular settings
+                    cornerHeight = GetDynamicCornerHeight(roomHeight, cornerDirection);
+                    cornerWidth = GetDynamicCornerWidth(cornerDirection);
+                    cornerDepth = GetDynamicCornerDepth(cornerDirection);
+                }
+                float cornerBoundsY = 0f; // Default to 0 (floor position)
+                
+                // Convert detected world position to local position relative to parent
+                // Use the corner's actual world position (already accounts for rotation)
+                Vector3 cornerPosition = parent.transform.InverseTransformPoint(corner.position);
+                
+                var cornerObj = CreateCorner(cornersParent, $"Corner {cornerIndex}",
+                    cornerPosition,
+                    new Vector3(cornerWidth, cornerHeight, cornerDepth),
+                    cornerPrefab, localBottomY, cornerBoundsY);
+                
+                if (cornerObj != null)
+                {
+                    // Set corner component direction based on angle
+                    var cornerComp = cornerObj.GetComponent<RoomCorner>();
+                    if (cornerComp != null)
                     {
-                        // Use back override settings
-                        cornerHeight = GetBackCornerHeight(roomHeight, cornerDirection);
-                        cornerWidth = GetBackCornerWidth(cornerDirection);
-                        cornerDepth = GetBackCornerDepth(cornerDirection);
-                    }
-                    else
-                    {
-                        // Use regular settings
-                        cornerHeight = GetDynamicCornerHeight(roomHeight, cornerDirection);
-                        cornerWidth = GetDynamicCornerWidth(cornerDirection);
-                        cornerDepth = GetDynamicCornerDepth(cornerDirection);
-                    }
-                    float cornerBoundsY = 0f; // Default to 0 (floor position)
-                    
-                    // Convert detected world position to local position relative to parent
-                    // Use the corner's actual world position (already accounts for rotation)
-                    Vector3 cornerPosition = parent.transform.InverseTransformPoint(corner.position);
-                    
-                    var cornerObj = CreateCorner(cornersParent, $"Corner {cornerIndex}",
-                        cornerPosition,
-                        new Vector3(cornerWidth, cornerHeight, cornerDepth),
-                        cornerPrefab, localBottomY, cornerBoundsY);
-                    
-                    if (cornerObj != null)
-                    {
-                        // Set corner component direction based on angle
-                        var cornerComp = cornerObj.GetComponent<RoomCorner>();
-                        if (cornerComp != null)
-                        {
-                            cornerComp.direction = cornerDirection;
-                        }
+                        cornerComp.direction = cornerDirection;
                     }
                 }
+                
                 cornerIndex++;
             }
             
@@ -565,54 +561,53 @@ namespace DungeonsForProBuilderEditor
             foreach (var wall in walls)
             {
                 GameObject wallPrefab = GetWallPrefabForDynamicWall(wall);
-                if (wallPrefab != null)
+                
+                // Use the stored face normal from mesh analysis (already in world space)
+                WallDirection wallDirection = DetermineWallDirection(wall.faceNormal);
+                
+                
+                // Check if this wall is back in its direction and use override settings if enabled
+                bool isBack = backWalls.Contains(wall);
+                float wallHeight, wallWidth, wallDepth;
+                
+                if (isBack)
                 {
-                    // Use the stored face normal from mesh analysis (already in world space)
-                    WallDirection wallDirection = DetermineWallDirection(wall.faceNormal);
-                    
-                    
-                    // Check if this wall is back in its direction and use override settings if enabled
-                    bool isBack = backWalls.Contains(wall);
-                    float wallHeight, wallWidth, wallDepth;
-                    
-                    if (isBack)
-                    {
-                        // Use back override settings
-                        wallHeight = GetBackWallHeight(roomHeight, wallDirection);
-                        wallWidth = GetBackWallWidth(wallDirection);
-                        wallDepth = GetBackWallDepth(wallDirection);
-                    }
-                    else
-                    {
-                        // Use regular settings
-                        wallHeight = GetDynamicWallHeight(roomHeight, wallDirection);
-                        wallWidth = GetDynamicWallWidth(wallDirection);
-                        wallDepth = GetDynamicWallDepth(wallDirection);
-                    }
-                    float wallBoundsY = 0f; // Default to 0 (floor position)
-                    
-                    // Convert detected world position to local position relative to parent
-                    // Use the wall's actual world center (already accounts for rotation)
-                    Vector3 wallCenter = parent.transform.InverseTransformPoint(wall.center);
-                    
-                    // Calculate wall rotation to align with the wall direction (in world space)
-                    Vector3 crossProduct = Vector3.Cross(wall.direction, Vector3.up);
-                    Quaternion worldWallRotation = crossProduct.magnitude > 0.001f ? 
-                        Quaternion.LookRotation(crossProduct) : Quaternion.identity;
-                    
-                    // Convert world rotation to local rotation relative to parent
-                    Quaternion wallRotation = Quaternion.Inverse(parent.transform.rotation) * worldWallRotation;
-                    
-                    var wallObj = CreateDynamicWall(wallsParent, $"Wall {wallIndex}",
-                        wallCenter,
-                        new Vector3(wall.length, wallHeight, wallDepth),
-                        wallPrefab, localBottomY, wallBoundsY, wallRotation, wall.faceNormal);
-                    
-                    if (wallObj != null)
-                    {
-                        // Wall created successfully
-                    }
+                    // Use back override settings
+                    wallHeight = GetBackWallHeight(roomHeight, wallDirection);
+                    wallWidth = GetBackWallWidth(wallDirection);
+                    wallDepth = GetBackWallDepth(wallDirection);
                 }
+                else
+                {
+                    // Use regular settings
+                    wallHeight = GetDynamicWallHeight(roomHeight, wallDirection);
+                    wallWidth = GetDynamicWallWidth(wallDirection);
+                    wallDepth = GetDynamicWallDepth(wallDirection);
+                }
+                float wallBoundsY = 0f; // Default to 0 (floor position)
+                
+                // Convert detected world position to local position relative to parent
+                // Use the wall's actual world center (already accounts for rotation)
+                Vector3 wallCenter = parent.transform.InverseTransformPoint(wall.center);
+                
+                // Calculate wall rotation to align with the wall direction (in world space)
+                Vector3 crossProduct = Vector3.Cross(wall.direction, Vector3.up);
+                Quaternion worldWallRotation = crossProduct.magnitude > 0.001f ? 
+                    Quaternion.LookRotation(crossProduct) : Quaternion.identity;
+                
+                // Convert world rotation to local rotation relative to parent
+                Quaternion wallRotation = Quaternion.Inverse(parent.transform.rotation) * worldWallRotation;
+                
+                var wallObj = CreateDynamicWall(wallsParent, $"Wall {wallIndex}",
+                    wallCenter,
+                    new Vector3(wall.length, wallHeight, wallDepth),
+                    wallPrefab, localBottomY, wallBoundsY, wallRotation, wall.faceNormal);
+                
+                if (wallObj != null)
+                {
+                    // Wall created successfully
+                }
+                
                 wallIndex++;
             }
         }
@@ -623,9 +618,20 @@ namespace DungeonsForProBuilderEditor
         private GameObject CreateDynamicWall(GameObject parent, string name, Vector3 position, Vector3 size,
             GameObject prefab, float localBottomY, float boundsY, Quaternion rotation, Vector3 faceNormal)
         {
-            if (prefab == null) return null;
+            GameObject go;
             
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            if (prefab != null)
+            {
+                // Use the provided prefab
+                go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            }
+            else
+            {
+                // Create a new ProBuilder cube with default dimensions 1x1x1
+                var newMesh = ShapeGenerator.CreateShape(ShapeType.Cube);
+                go = newMesh.gameObject;
+            }
+            
             go.name = name;
             go.transform.SetParent(parent.transform);
             Undo.RegisterCreatedObjectUndo(go, "Build Room");
@@ -662,6 +668,9 @@ namespace DungeonsForProBuilderEditor
                 var boxCollider = go.AddComponent<BoxCollider>();
                 Undo.RegisterCreatedObjectUndo(boxCollider, "Build Room");
             }
+            
+            // Set layer
+            go.layer = currentSettings.wallsLayer;
             
             return go;
         }
@@ -851,14 +860,29 @@ namespace DungeonsForProBuilderEditor
             meshCollider.convex = false; // Non-convex for accurate floor detection
             Undo.RegisterCreatedObjectUndo(meshCollider, "Build Room");
             
+            // Set layer
+            go.layer = currentSettings.floorLayer;
+            
             return go;
         }
         
         
         private GameObject CreateWall(GameObject parent, string name, Vector3 position, Vector3 size, GameObject prefab, float localBottomY, float boundsY)
         {
-            if (prefab == null) return null;
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            GameObject go;
+            
+            if (prefab != null)
+            {
+                // Use the provided prefab
+                go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            }
+            else
+            {
+                // Create a new ProBuilder cube with default dimensions 1x1x1
+                var newMesh = ShapeGenerator.CreateShape(ShapeType.Cube);
+                go = newMesh.gameObject;
+            }
+            
             go.name = name;
             go.transform.SetParent(parent.transform);
             Undo.RegisterCreatedObjectUndo(go, "Build Room");
@@ -901,6 +925,9 @@ namespace DungeonsForProBuilderEditor
                 var boxCollider = go.AddComponent<BoxCollider>();
                 Undo.RegisterCreatedObjectUndo(boxCollider, "Build Room");
             }
+            
+            // Set layer
+            go.layer = currentSettings.wallsLayer;
             
             return go;
         }
@@ -987,15 +1014,29 @@ namespace DungeonsForProBuilderEditor
             meshCollider.convex = false;
             Undo.RegisterCreatedObjectUndo(meshCollider, "Build Room");
             
+            // Set layer
+            go.layer = currentSettings.ceilingLayer;
+            
             return go;
         }
         
         
         private GameObject CreateCorner(GameObject parent, string name, Vector3 position, Vector3 size, GameObject prefab, float localBottomY, float boundsY)
         {
-            if (prefab == null) return null;
+            GameObject go;
             
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            if (prefab != null)
+            {
+                // Use the provided prefab
+                go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            }
+            else
+            {
+                // Create a new ProBuilder cube with default dimensions 1x1x1
+                var newMesh = ShapeGenerator.CreateShape(ShapeType.Cube);
+                go = newMesh.gameObject;
+            }
+            
             go.name = name;
             go.transform.SetParent(parent.transform);
             Undo.RegisterCreatedObjectUndo(go, "Build Room");
@@ -1038,6 +1079,9 @@ namespace DungeonsForProBuilderEditor
                 var boxCollider = go.AddComponent<BoxCollider>();
                 Undo.RegisterCreatedObjectUndo(boxCollider, "Build Room");
             }
+            
+            // Set layer
+            go.layer = currentSettings.cornersLayer;
             
             return go;
         }
@@ -1101,10 +1145,7 @@ namespace DungeonsForProBuilderEditor
         
         private void UpdateStatus(string message)
         {
-            if (statusLabel != null)
-            {
-                statusLabel.text = message;
-            }
+            // Status section removed from UI
         }
 
         private void RefreshSelectionWarning()
@@ -1523,10 +1564,10 @@ namespace DungeonsForProBuilderEditor
                 hasDoorOperation = selectedObject.GetComponentInChildren<DoorOperation>() != null;
             }
 
-            // Build Room button - enabled only if ProBuilder cube is selected, no room exists, not a child of room, and selected object is not itself a child of a room
+            // Build Room button - enabled only if ProBuilder cube is selected, no room exists, not a child of room, selected object is not itself a child of a room, and settings are assigned
             if (buildRoomButton != null)
             {
-                buildRoomButton.SetEnabled(hasProBuilderCube && !hasRoom && !isProBuilderChildOfRoom && !isChildOfRoom);
+                buildRoomButton.SetEnabled(hasProBuilderCube && !hasRoom && !isProBuilderChildOfRoom && !isChildOfRoom && currentSettings != null);
             }
 
             // Reset Room button - enabled if room is selected OR if selected object is a child of a room

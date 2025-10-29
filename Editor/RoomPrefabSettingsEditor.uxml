@@ -56,12 +56,10 @@
             <engine:VisualElement class="row w1">
                 <engine:Label text="X:" class="axis-label"/>
                 <engine:FloatField binding-path="cornerWidth" class="w1"/>
-                <engine:Label text="Y:" class="axis-label"/>
-                <engine:FloatField binding-path="cornerHeight" class="w1"/>
                 <engine:Label text="Z:" class="axis-label"/>
                 <engine:FloatField binding-path="cornerDepth" class="w1"/>
-                <engine:Label text="+ Back Y:"/>
-                <engine:FloatField binding-path="cornerBackHeight" class="w1"/>
+                <engine:Label text="+Y:"/>
+                <engine:FloatField binding-path="cornerHeightOffset" class="w1"/>
             </engine:VisualElement>
         </engine:VisualElement>
         <engine:Label text="Layers" class="section-header"/>

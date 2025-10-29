@@ -41,6 +41,13 @@ namespace DungeonsForProBuilder
         [Tooltip("The direction this wall faces")]
         public WallDirection direction;
         
+        [Header("Height Override")]
+        [Tooltip("Enable to override the wall height")]
+        public bool overrideHeight = false;
+        
+        [Tooltip("Custom height for this wall (only used if override is enabled)")]
+        public float customHeight = 3f;
+        
         /// <summary>
         /// Get the normalized direction vector for this wall
         /// </summary>

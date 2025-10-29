@@ -242,6 +242,14 @@ namespace DungeonsForProBuilderEditor
                 
                 // Mark the object as dirty for undo
                 EditorUtility.SetDirty(roomParent);
+                
+                // Select the Room GameObject (with Room component) instead of last created wall
+                Selection.activeGameObject = roomParent;
+                
+                // Collapse the hierarchy for the Room GameObject
+                CollapseHierarchy(roomParent);
+                
+                UnityEngine.Debug.Log($"[BuildRoom] Room '{roomParent.name}' built and selected");
             }
             
             UpdateStatus("Room created successfully");
@@ -559,11 +567,59 @@ namespace DungeonsForProBuilderEditor
             // Clear any existing room components by destroying them
             // (We'll create new ones below)
             
-            // Clean up existing parent organization GameObjects
+            // Store existing wall height overrides before destroying them
+            var wallOverrides = new System.Collections.Generic.Dictionary<string, (bool overrideHeight, float customHeight)>();
             var existingWallsParent = parent.transform.Find("Walls");
             if (existingWallsParent != null)
             {
+                // Store all wall override settings by name (preserve all walls, even if override is disabled)
+                foreach (Transform wallTransform in existingWallsParent)
+                {
+                    var wallComponent = wallTransform.GetComponent<RoomWall>();
+                    if (wallComponent != null)
+                    {
+                        // Always preserve override settings, even if currently disabled
+                        wallOverrides[wallTransform.name] = (wallComponent.overrideHeight, wallComponent.customHeight);
+                        if (wallComponent.overrideHeight)
+                        {
+                            UnityEngine.Debug.Log($"Preserving height override for wall '{wallTransform.name}': override={wallComponent.overrideHeight}, height={wallComponent.customHeight}");
+                        }
+                        else
+                        {
+                            UnityEngine.Debug.Log($"Preserving wall settings for '{wallTransform.name}': override={wallComponent.overrideHeight}, height={wallComponent.customHeight}");
+                        }
+                    }
+                }
+                
                 Undo.DestroyObjectImmediate(existingWallsParent.gameObject);
+            }
+            
+            // If no overrides found from existing walls, check EditorPrefs (saved by RoomWallEditor)
+            if (wallOverrides.Count == 0 && EditorPrefs.HasKey("TempWallOverrides"))
+            {
+                string savedData = EditorPrefs.GetString("TempWallOverrides");
+                UnityEngine.Debug.Log($"[BuildRoom] Loading wall overrides from EditorPrefs: {savedData}");
+                
+                if (!string.IsNullOrEmpty(savedData))
+                {
+                    string[] entries = savedData.Split(';');
+                    foreach (string entry in entries)
+                    {
+                        string[] parts = entry.Split('|');
+                        if (parts.Length == 3)
+                        {
+                            string wallName = parts[0];
+                            bool overrideEnabled = bool.Parse(parts[1]);
+                            float customHeight = float.Parse(parts[2]);
+                            wallOverrides[wallName] = (overrideEnabled, customHeight);
+                            UnityEngine.Debug.Log($"[BuildRoom] Loaded override from EditorPrefs: {wallName}, override={overrideEnabled}, height={customHeight}");
+                        }
+                    }
+                    
+                    // Clear the temp data
+                    EditorPrefs.DeleteKey("TempWallOverrides");
+                    UnityEngine.Debug.Log($"[BuildRoom] Loaded {wallOverrides.Count} wall overrides from EditorPrefs");
+                }
             }
             
             var existingCornersParent = parent.transform.Find("Corners");
@@ -597,24 +653,13 @@ namespace DungeonsForProBuilderEditor
                 
                 CornerDirection cornerDirection = DetermineCornerDirection(corner.normal);
                 
-                // Check if this corner is back in its direction and use override settings if enabled
-                bool isBack = backCorners.Contains(corner);
-                float cornerHeight, cornerWidth, cornerDepth;
+                // Calculate corner height based on tallest connecting wall + offset
+                float cornerHeight = GetCornerHeightFromConnectingWalls(corner, walls, backWalls, roomHeight, cornerDirection, wallOverrides);
                 
-                if (isBack)
-                {
-                    // Use back override settings
-                    cornerHeight = GetBackCornerHeight(roomHeight, cornerDirection);
-                    cornerWidth = GetBackCornerWidth(cornerDirection);
-                    cornerDepth = GetBackCornerDepth(cornerDirection);
-                }
-                else
-                {
-                    // Use regular settings
-                    cornerHeight = GetDynamicCornerHeight(roomHeight, cornerDirection);
-                    cornerWidth = GetDynamicCornerWidth(cornerDirection);
-                    cornerDepth = GetDynamicCornerDepth(cornerDirection);
-                }
+                // Width and depth are the same for all corners (no back distinction needed)
+                float cornerWidth = GetDynamicCornerWidth(cornerDirection);
+                float cornerDepth = GetDynamicCornerDepth(cornerDirection);
+                
                 float cornerBoundsY = 0f; // Default to 0 (floor position)
                 
                 // Convert detected world position to local position relative to parent
@@ -681,14 +726,54 @@ namespace DungeonsForProBuilderEditor
                 // Convert world rotation to local rotation relative to parent
                 Quaternion wallRotation = Quaternion.Inverse(parent.transform.rotation) * worldWallRotation;
                 
-                var wallObj = CreateDynamicWall(wallsParent, $"Wall {wallIndex}",
+                // Check if this wall had an override before - if so, use it for height
+                string wallName = $"Wall {wallIndex}";
+                float finalWallHeight = wallHeight;
+                
+                if (wallOverrides.ContainsKey(wallName))
+                {
+                    var (overrideEnabled, customHeight) = wallOverrides[wallName];
+                    if (overrideEnabled)
+                    {
+                        finalWallHeight = customHeight;
+                        UnityEngine.Debug.Log($"Using preserved custom height {customHeight} for wall '{wallName}'");
+                    }
+                }
+                
+                var wallObj = CreateDynamicWall(wallsParent, wallName,
                     wallCenter,
-                    new Vector3(wall.length, wallHeight, wallDepth),
+                    new Vector3(wall.length, finalWallHeight, wallDepth),
                     wallPrefab, localBottomY, wallBoundsY, wallRotation, wall.faceNormal);
                 
                 if (wallObj != null)
                 {
-                    // Wall created successfully
+                    // Restore height override settings to the component
+                    if (wallOverrides.ContainsKey(wallObj.name))
+                    {
+                        var wallComp = wallObj.GetComponent<RoomWall>();
+                        if (wallComp != null)
+                        {
+                            var (overrideHeight, customHeight) = wallOverrides[wallObj.name];
+                            
+                            // Record undo and apply changes properly
+                            Undo.RecordObject(wallComp, "Build Room");
+                            wallComp.overrideHeight = overrideHeight;
+                            wallComp.customHeight = customHeight;
+                            
+#if UNITY_EDITOR
+                            // Force Unity to serialize the changes
+                            EditorUtility.SetDirty(wallComp);
+                            EditorUtility.SetDirty(wallObj);
+                            EditorUtility.SetDirty(wallObj.transform);
+#endif
+                            
+                            UnityEngine.Debug.Log($"Restored height override settings for wall '{wallObj.name}': override={overrideHeight}, height={customHeight}");
+                        }
+                    }
+                    else
+                    {
+                        UnityEngine.Debug.Log($"No override found for wall '{wallObj.name}' in dictionary. Available keys: {string.Join(", ", wallOverrides.Keys)}");
+                    }
                 }
                 
                 wallIndex++;
@@ -728,6 +813,7 @@ namespace DungeonsForProBuilderEditor
             go.transform.localPosition = new Vector3(position.x, yPos, position.z);
             go.transform.localRotation = rotation;
             
+            // Resize the ProBuilder mesh to the specified size
             var probuilderMesh = go.GetComponent<ProBuilderMesh>();
             if (probuilderMesh != null)
             {
@@ -842,10 +928,106 @@ namespace DungeonsForProBuilderEditor
         }
         
         
-        private float GetDynamicCornerHeight(float roomHeight, CornerDirection direction)
+        /// <summary>
+        /// Calculates corner height based on the tallest connecting wall plus offset
+        /// </summary>
+        private float GetCornerHeightFromConnectingWalls(DetectedCorner corner,
+            System.Collections.Generic.List<DetectedWall> walls,
+            System.Collections.Generic.HashSet<DetectedWall> backWalls,
+            float roomHeight,
+            CornerDirection cornerDirection,
+            System.Collections.Generic.Dictionary<string, (bool overrideHeight, float customHeight)> wallOverrides)
         {
             if (currentSettings == null) return roomHeight;
-            return currentSettings.cornerHeight;
+            
+            // Get the two wall directions that connect to this corner
+            var (wallDir1, wallDir2) = GetAdjacentWallDirections(cornerDirection);
+            
+            float maxWallHeight = 0f;
+            int wallIndex = 0;
+            
+            // Find all walls that connect to this corner (by checking their direction)
+            foreach (var wall in walls)
+            {
+                WallDirection wallDirection = DetermineWallDirection(wall.faceNormal);
+                
+                // Check if this wall is one of the two connecting to this corner
+                if (wallDirection == wallDir1 || wallDirection == wallDir2)
+                {
+                    // Check if this wall has a height override stored
+                    string wallName = $"Wall {wallIndex}";
+                    float wallHeight = 0f;
+                    
+                    // First check if there's a stored override for this wall
+                    bool hasOverride = false;
+                    if (wallOverrides != null && wallOverrides.ContainsKey(wallName))
+                    {
+                        var (overrideEnabled, customHeight) = wallOverrides[wallName];
+                        if (overrideEnabled)
+                        {
+                            wallHeight = customHeight;
+                            hasOverride = true;
+                            UnityEngine.Debug.Log($"  Using override height {customHeight} for wall {wallName}");
+                        }
+                    }
+                    
+                    // If no override, calculate from settings
+                    if (!hasOverride)
+                    {
+                        bool isBack = backWalls.Contains(wall);
+                        
+                        if (isBack)
+                        {
+                            wallHeight = GetBackWallHeight(roomHeight, wallDirection);
+                        }
+                        else
+                        {
+                            wallHeight = GetDynamicWallHeight(roomHeight, wallDirection);
+                        }
+                    }
+                    
+                    // Keep track of the tallest wall
+                    if (wallHeight > maxWallHeight)
+                    {
+                        maxWallHeight = wallHeight;
+                    }
+                }
+                
+                wallIndex++;
+            }
+            
+            // If no connecting walls found, use room height as fallback
+            if (maxWallHeight == 0f)
+            {
+                maxWallHeight = roomHeight;
+            }
+            
+            // Corner height = tallest connecting wall + offset
+            float cornerHeight = maxWallHeight + currentSettings.cornerHeightOffset;
+            
+            UnityEngine.Debug.Log($"Corner {cornerDirection}: tallest wall={maxWallHeight}, offset={currentSettings.cornerHeightOffset}, final height={cornerHeight}");
+            
+            return cornerHeight;
+        }
+        
+        /// <summary>
+        /// Get the wall directions that form this corner
+        /// </summary>
+        private (WallDirection, WallDirection) GetAdjacentWallDirections(CornerDirection direction)
+        {
+            switch (direction)
+            {
+                case CornerDirection.NorthEast:
+                    return (WallDirection.North, WallDirection.East);
+                case CornerDirection.SouthEast:
+                    return (WallDirection.South, WallDirection.East);
+                case CornerDirection.SouthWest:
+                    return (WallDirection.South, WallDirection.West);
+                case CornerDirection.NorthWest:
+                    return (WallDirection.North, WallDirection.West);
+                default:
+                    return (WallDirection.North, WallDirection.East);
+            }
         }
         
         private float GetDynamicCornerWidth(CornerDirection direction)
@@ -1226,6 +1408,28 @@ namespace DungeonsForProBuilderEditor
             mesh.Refresh(RefreshMask.All);
         }
         
+        private void CollapseHierarchy(GameObject go)
+        {
+            if (go == null) return;
+            
+            // Use Unity's internal API to collapse the hierarchy
+            var type = typeof(EditorWindow).Assembly.GetType("UnityEditor.SceneHierarchyWindow");
+            if (type != null)
+            {
+                var hierarchyWindow = EditorWindow.GetWindow(type);
+                if (hierarchyWindow != null)
+                {
+                    var method = type.GetMethod("SetExpandedRecursive", 
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    if (method != null)
+                    {
+                        method.Invoke(hierarchyWindow, new object[] { go.GetInstanceID(), false });
+                        UnityEngine.Debug.Log($"[CollapseHierarchy] Collapsed '{go.name}' in hierarchy");
+                    }
+                }
+            }
+        }
+        
         private void UpdateStatus(string message)
         {
             // Status section removed from UI
@@ -1379,6 +1583,38 @@ namespace DungeonsForProBuilderEditor
             {
                 UpdateStatus("Selected object is not a room. Please select a room to reset.");
                 return;
+            }
+
+            // CAPTURE wall override settings BEFORE reset destroys them
+            Transform tempRoomMeshTransform = roomParent.transform.Find("Room Mesh");
+            if (tempRoomMeshTransform != null)
+            {
+                Transform tempWallsParent = tempRoomMeshTransform.Find("Walls");
+                if (tempWallsParent != null)
+                {
+                    // Clear previous data
+                    EditorPrefs.DeleteKey("TempWallOverrides");
+                    
+                    var overrideData = new System.Collections.Generic.List<string>();
+                    
+                    foreach (Transform wallTransform in tempWallsParent)
+                    {
+                        var wallComp = wallTransform.GetComponent<RoomWall>();
+                        if (wallComp != null)
+                        {
+                            // Format: wallName|overrideEnabled|customHeight
+                            string data = $"{wallTransform.name}|{wallComp.overrideHeight}|{wallComp.customHeight}";
+                            overrideData.Add(data);
+                            UnityEngine.Debug.Log($"[ResetRoom] Captured override for '{wallTransform.name}': override={wallComp.overrideHeight}, height={wallComp.customHeight}");
+                        }
+                    }
+                    
+                    if (overrideData.Count > 0)
+                    {
+                        EditorPrefs.SetString("TempWallOverrides", string.Join(";", overrideData));
+                        UnityEngine.Debug.Log($"[ResetRoom] Saved {overrideData.Count} wall overrides to EditorPrefs");
+                    }
+                }
             }
 
             // Register undo operation
@@ -3547,15 +3783,6 @@ namespace DungeonsForProBuilderEditor
             }
         }
         
-        /// <summary>
-        /// Gets the back override height for the specified corner direction
-        /// </summary>
-        private float GetBackCornerHeight(float roomHeight, CornerDirection direction)
-        {
-            if (currentSettings == null) return roomHeight;
-            // Back height is additive: base height + additional back height
-            return roomHeight + currentSettings.cornerBackHeight;
-        }
         
         /// <summary>
         /// Gets the back override width for the specified corner direction

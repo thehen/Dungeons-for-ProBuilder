@@ -65,11 +65,10 @@ namespace DungeonsForProBuilder
         public GameObject cornerPrefab;
         
         [Min(0.001f)] public float cornerWidth = 1.5f;
-        [Min(0.001f)] public float cornerHeight = 2f;
         [Min(0.001f)] public float cornerDepth = 1.5f;
         
-        [Tooltip("Additional height added to back corners (base height + this value)")]
-        [Min(0.0f)] public float cornerBackHeight = 0.5f;
+        [Tooltip("Additional height added above the tallest connecting wall")]
+        [Min(0.0f)] public float cornerHeightOffset = 0.5f;
 
         [Header("Layers")]
         [Tooltip("Layer to assign to floor objects")]

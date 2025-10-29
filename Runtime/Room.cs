@@ -221,7 +221,9 @@ namespace DungeonsForProBuilder
             // Update corner positions and sizes
             if (corners != null && corners.Length >= 4 && roomPrefabSettings != null)
             {
-                float cornerHeight = roomPrefabSettings.cornerHeight;
+                // Corner height is now calculated as tallest wall + offset
+                // For legacy corners, approximate using wall height + offset
+                float cornerHeight = wallHeight + roomPrefabSettings.cornerHeightOffset;
                 float cornerWidth = roomPrefabSettings.cornerWidth;
                 float cornerDepth = roomPrefabSettings.cornerDepth;
                 

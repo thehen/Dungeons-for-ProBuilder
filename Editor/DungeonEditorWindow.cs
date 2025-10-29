@@ -41,6 +41,10 @@ namespace DungeonsForProBuilderEditor
         private VisualElement doorActionButtonsContainer;
         private VisualElement doorWarningHost;
         private HelpBox doorWarningBox;
+        
+        // Debug elements
+        private Toggle debugRaycastsToggle;
+        private bool showDebugRaycasts = false;
 
         // data
         private RoomPrefabSettings currentSettings;
@@ -100,6 +104,9 @@ namespace DungeonsForProBuilderEditor
             actionButtonsContainer = rootElement.Q<VisualElement>("action-buttons");
             doorActionButtonsContainer = rootElement.Q<VisualElement>("door-action-buttons");
             doorWarningHost = rootElement.Q<VisualElement>("door-warning");
+            
+            // Debug elements
+            debugRaycastsToggle = rootElement.Q<Toggle>("debug-raycasts-toggle");
             
             // Set up event handlers
             SetupEventHandlers();
@@ -164,6 +171,17 @@ namespace DungeonsForProBuilderEditor
                 
             if (resetDoorButton != null)
                 resetDoorButton.clicked += OnResetDoorClicked;
+                
+            // Debug toggle event handler
+            if (debugRaycastsToggle != null)
+            {
+                debugRaycastsToggle.value = false; // Default to disabled
+                debugRaycastsToggle.RegisterValueChangedCallback(evt => 
+                {
+                    showDebugRaycasts = evt.newValue;
+                    SceneView.RepaintAll(); // Refresh scene view when toggled
+                });
+            }
         }
         
         private void InitializeWindow()
@@ -271,7 +289,23 @@ namespace DungeonsForProBuilderEditor
                         var newWall = ProBuilderBooleanUtility.PerformBooleanSubtraction(wallMesh, doorMesh);
                         if (newWall != null)
                         {
-                            newWall.transform.SetParent(room.transform);
+                            UnityEngine.Debug.Log($"[AutoBuildDoors] Boolean subtraction successful - wall: {wall.name}");
+                            UnityEngine.Debug.Log($"[AutoBuildDoors] Room GameObject: {room.gameObject.name}");
+                            
+                            // Find the Walls parent GameObject to maintain proper hierarchy
+                            // Room component is on parent GameObject, Walls is under Room Mesh child
+                            Transform wallsParent = room.transform.Find("Room Mesh/Walls");
+                            if (wallsParent != null)
+                            {
+                                UnityEngine.Debug.Log($"[AutoBuildDoors] Found Walls parent, setting new wall as child");
+                                newWall.transform.SetParent(wallsParent);
+                            }
+                            else
+                            {
+                                // Fallback to room transform if Walls parent doesn't exist
+                                UnityEngine.Debug.LogWarning($"[AutoBuildDoors] Could not find 'Room Mesh/Walls' under {room.gameObject.name}, falling back to room transform");
+                                newWall.transform.SetParent(room.transform);
+                            }
                             newWall.name = wall.name;
                             
                             var originalWallComponent = wall.GetComponent<RoomWall>();
@@ -345,6 +379,11 @@ namespace DungeonsForProBuilderEditor
             Vector3 center = bounds.center;
             Vector3 size = bounds.size;
             
+            // Store the original parent, sibling index, and name to preserve hierarchy, order, and identity
+            Transform originalParent = null;
+            int originalSiblingIndex = 0;
+            string originalRoomName = "Room"; // Default name
+            
             // Clean up any existing room components and parent GameObjects first
             // Check if the parent has a Room component (new hierarchy: Room > Room Mesh)
             var existingRoom = sourceCube.transform.parent != null ? 
@@ -353,6 +392,11 @@ namespace DungeonsForProBuilderEditor
             if (existingRoom != null)
             {
                 GameObject existingRoomParent = existingRoom.gameObject;
+                
+                // Store the parent, sibling index, and name of the existing Room container
+                originalParent = existingRoomParent.transform.parent;
+                originalSiblingIndex = existingRoomParent.transform.GetSiblingIndex();
+                originalRoomName = existingRoomParent.name;
                 
                 // Destroy existing room components
                 foreach (var component in existingRoom.GetRoomComponents())
@@ -382,6 +426,13 @@ namespace DungeonsForProBuilderEditor
                 // Destroy the room parent container
                 Undo.DestroyObjectImmediate(existingRoomParent);
             }
+            else
+            {
+                // No existing Room, so store the source cube's parent, sibling index, and name directly
+                originalParent = sourceCube.transform.parent;
+                originalSiblingIndex = sourceCube.transform.GetSiblingIndex();
+                originalRoomName = sourceCube.gameObject.name; // Use source cube's name for first build
+            }
             
             // Create the parent GameObject structure
             GameObject roomParent;
@@ -391,7 +442,7 @@ namespace DungeonsForProBuilderEditor
             {
                 // Instantiate the room prefab as the parent
                 roomParent = (GameObject)PrefabUtility.InstantiatePrefab(currentSettings.roomPrefab);
-                roomParent.name = "Room";
+                roomParent.name = originalRoomName; // Preserve the original name
                 roomParent.transform.position = sourceCube.transform.position;
                 roomParent.transform.rotation = sourceCube.transform.rotation;
                 Undo.RegisterCreatedObjectUndo(roomParent, "Build Room");
@@ -399,21 +450,53 @@ namespace DungeonsForProBuilderEditor
             else
             {
                 // Create a new parent GameObject
-                roomParent = new GameObject("Room");
+                roomParent = new GameObject(originalRoomName); // Preserve the original name
                 roomParent.transform.position = sourceCube.transform.position;
                 roomParent.transform.rotation = sourceCube.transform.rotation;
                 Undo.RegisterCreatedObjectUndo(roomParent, "Build Room");
             }
             
+            UnityEngine.Debug.Log($"[BuildRoom] Created Room with name: {originalRoomName}");
+            
+            // Restore the original parent and sibling index to preserve hierarchy and order
+            if (originalParent != null)
+            {
+                UnityEngine.Debug.Log($"[BuildRoom] Setting Room parent to: {originalParent.name} at index {originalSiblingIndex}");
+                Undo.SetTransformParent(roomParent.transform, originalParent, "Build Room");
+            }
+            else
+            {
+                UnityEngine.Debug.Log($"[BuildRoom] Room staying at root (source was at root) at index {originalSiblingIndex}");
+            }
+            roomParent.transform.SetSiblingIndex(originalSiblingIndex);
+            
             // Add Room component to the parent
             var roomComponent = roomParent.AddComponent<Room>();
             Undo.RegisterCreatedObjectUndo(roomComponent, "Build Room");
+            
+            // Store any existing children of the source cube (before it becomes "Room Mesh")
+            // These should be preserved and moved to be direct children of the Room container
+            var existingChildren = new System.Collections.Generic.List<Transform>();
+            foreach (Transform child in sourceCube.transform)
+            {
+                existingChildren.Add(child);
+            }
             
             // Make the source cube a child and rename it to "Room Mesh"
             Undo.SetTransformParent(sourceCube.transform, roomParent.transform, "Build Room");
             sourceCube.transform.localPosition = Vector3.zero;
             sourceCube.transform.localRotation = Quaternion.identity;
             sourceCube.gameObject.name = "Room Mesh";
+            
+            // Move existing children to be direct children of Room (preserving hierarchy)
+            foreach (var child in existingChildren)
+            {
+                if (child != null)
+                {
+                    UnityEngine.Debug.Log($"[BuildRoom] Moving existing child to Room container: {child.name}");
+                    Undo.SetTransformParent(child, roomParent.transform, "Build Room");
+                }
+            }
             
             // Create floor (only if enabled and prefab provided)
             GameObject floor = null;
@@ -1384,11 +1467,53 @@ namespace DungeonsForProBuilderEditor
                 Undo.DestroyObjectImmediate(cornersParent.gameObject);
             }
 
+            // Store the Room parent's parent, sibling index, and name to preserve hierarchy, order, and identity
+            Transform originalParent = roomParent.transform.parent;
+            int originalSiblingIndex = roomParent.transform.GetSiblingIndex();
+            string originalRoomName = roomParent.name;
+            
             // Remove the Room component
             Undo.DestroyObjectImmediate(room);
 
-            // Move the Room Mesh back to root
-            Undo.SetTransformParent(roomMesh.transform, null, "Reset Room");
+            // Move all direct children of Room (except Room Mesh) to become children of Room Mesh
+            // This preserves the hierarchy so they can be moved back when rebuilding
+            var directChildrenToKeep = new System.Collections.Generic.List<Transform>();
+            foreach (Transform child in roomParent.transform)
+            {
+                if (child != roomMeshTransform)
+                {
+                    directChildrenToKeep.Add(child);
+                }
+            }
+            
+            // Move other direct children to be children of Room Mesh (preserving hierarchy)
+            foreach (var child in directChildrenToKeep)
+            {
+                if (child != null)
+                {
+                    UnityEngine.Debug.Log($"[ResetRoom] Preserving direct child as child of Room Mesh: {child.name}");
+                    Undo.SetTransformParent(child, roomMeshTransform, "Reset Room");
+                }
+            }
+            
+            // Move the Room Mesh to the original parent (preserving hierarchy)
+            if (originalParent != null)
+            {
+                UnityEngine.Debug.Log($"[ResetRoom] Restoring Room Mesh to parent: {originalParent.name} at index {originalSiblingIndex}");
+            }
+            else
+            {
+                UnityEngine.Debug.Log($"[ResetRoom] Room Mesh staying at root (was at root) at index {originalSiblingIndex}");
+            }
+            Undo.SetTransformParent(roomMesh.transform, originalParent, "Reset Room");
+            roomMesh.transform.SetSiblingIndex(originalSiblingIndex);
+            
+            // Restore the original Room name to the Room Mesh
+            roomMesh.name = originalRoomName;
+            UnityEngine.Debug.Log($"[ResetRoom] Restored name: {originalRoomName}");
+            
+            // Clear all debug lines (lines will be cleared on next scene refresh)
+            UnityEditor.SceneView.RepaintAll();
             
             // Re-enable visual components on the ProBuilder mesh
             var probuilderMesh = roomMesh.GetComponent<ProBuilderMesh>();
@@ -1721,6 +1846,23 @@ namespace DungeonsForProBuilderEditor
             doorMesh.transform.localRotation = Quaternion.identity;
             doorMesh.gameObject.name = "Door Mesh";
             
+            // Set up door collider as trigger
+            var doorCollider = doorMesh.GetComponent<Collider>();
+            if (doorCollider == null)
+            {
+                // Add a mesh collider if none exists
+                var meshCollider = doorMesh.gameObject.AddComponent<MeshCollider>();
+                meshCollider.convex = true;
+                meshCollider.isTrigger = true;
+                Undo.RegisterCreatedObjectUndo(meshCollider, "Build Door");
+            }
+            else
+            {
+                // Make existing collider a trigger
+                Undo.RecordObject(doorCollider, "Build Door");
+                doorCollider.isTrigger = true;
+            }
+            
             // Perform the door operation
             if (PerformDoorOperation(doorOperation, doorMesh, overlappingWalls))
             {
@@ -1911,6 +2053,23 @@ namespace DungeonsForProBuilderEditor
                 doorRenderer.enabled = true;
             }
             
+            // Set up door collider as trigger
+            var doorCollider = doorMesh.GetComponent<Collider>();
+            if (doorCollider == null)
+            {
+                // Add a mesh collider if none exists
+                var meshCollider = doorMesh.AddComponent<MeshCollider>();
+                meshCollider.convex = true;
+                meshCollider.isTrigger = true;
+                Undo.RegisterCreatedObjectUndo(meshCollider, "Rebuild Door");
+            }
+            else
+            {
+                // Make existing collider a trigger
+                Undo.RecordObject(doorCollider, "Rebuild Door");
+                doorCollider.isTrigger = true;
+            }
+            
             // Clear the door operation data but keep the component
             doorOperation.originalWalls = null;
             doorOperation.newWallMeshes = null;
@@ -2028,11 +2187,27 @@ namespace DungeonsForProBuilderEditor
                     {
                         UnityEngine.Debug.Log($"  Boolean subtraction SUCCESS - new wall created: {newWall.name}");
                         
-                        // Make new wall a child of the wall's parent room
+                        // Make new wall a child of the Walls parent GameObject to maintain proper hierarchy
                         var wallRoom = wall.GetComponentInParent<Room>();
                         if (wallRoom != null)
                         {
-                            newWall.transform.SetParent(wallRoom.transform);
+                            UnityEngine.Debug.Log($"  Found parent Room: {wallRoom.gameObject.name}");
+                            Transform wallsParent = wallRoom.transform.Find("Room Mesh/Walls");
+                            if (wallsParent != null)
+                            {
+                                UnityEngine.Debug.Log($"  Found Walls parent at: {wallsParent.gameObject.name}, setting new wall as child");
+                                newWall.transform.SetParent(wallsParent);
+                            }
+                            else
+                            {
+                                // Fallback to room transform if Walls parent doesn't exist
+                                UnityEngine.Debug.LogWarning($"  Could not find 'Room Mesh/Walls' under {wallRoom.gameObject.name}, falling back to room transform");
+                                newWall.transform.SetParent(wallRoom.transform);
+                            }
+                        }
+                        else
+                        {
+                            UnityEngine.Debug.LogWarning($"  Could not find parent Room component for wall {wall.name}");
                         }
                         newWall.name = wall.name;
                         
@@ -2881,41 +3056,102 @@ namespace DungeonsForProBuilderEditor
                 return false;
             }
             
-            // Calculate top edge endpoints
+            // Calculate wall corners
             Vector3 bottomA = wall.start;
             Vector3 bottomB = wall.end;
             Vector3 topA = bottomA + Vector3.up * wallHeight;
             Vector3 topB = bottomB + Vector3.up * wallHeight;
             
-            // Calculate the room center for camera positioning
-            Vector3 wallCenter = (topA + topB) * 0.5f;
+            // Apply 2-unit padding on all sides (top, bottom, left, right)
+            float padding = 2f;
+            
+            // Bottom padding: start 2 units above base
+            float bottomPadding = Mathf.Min(padding, wallHeight * 0.4f);
+            Vector3 paddedBottomA = bottomA + Vector3.up * bottomPadding;
+            Vector3 paddedBottomB = bottomB + Vector3.up * bottomPadding;
+            
+            // Top padding: end 2 units below top
+            float topPadding = Mathf.Min(padding, wallHeight * 0.4f);
+            Vector3 paddedTopA = topA - Vector3.up * topPadding;
+            Vector3 paddedTopB = topB - Vector3.up * topPadding;
+            
+            // Left/Right padding: inset 2 units from each end along the wall
+            float horizontalPadding = Mathf.Min(padding, wall.length * 0.4f);
+            float horizontalPaddingRatio = horizontalPadding / wall.length;
+            
+            Vector3 offsetBottomA = Vector3.Lerp(paddedBottomA, paddedBottomB, horizontalPaddingRatio);
+            Vector3 offsetBottomB = Vector3.Lerp(paddedBottomA, paddedBottomB, 1f - horizontalPaddingRatio);
+            Vector3 offsetTopA = Vector3.Lerp(paddedTopA, paddedTopB, horizontalPaddingRatio);
+            Vector3 offsetTopB = Vector3.Lerp(paddedTopA, paddedTopB, 1f - horizontalPaddingRatio);
+            
+            // Calculate the wall center for camera positioning
+            Vector3 wallCenter = (bottomA + bottomB + topA + topB) * 0.25f;
             
             // Position the isometric camera far above and behind the room in the viewing direction
             float cameraDistance = 1000f;
             Vector3 cameraPosition = wallCenter - viewDirection * cameraDistance;
             
-            // Sample multiple points along the top edge
-            int sampleCount = Mathf.Max(3, Mathf.CeilToInt(wall.length / 0.5f));
+            // Sample points across the padded area of the wall (reduced density: 2.0 unit spacing)
+            float paddedWidth = Vector3.Distance(offsetBottomA, offsetBottomB);
+            float paddedHeight = Vector3.Distance(offsetBottomA, offsetTopA);
             
-            for (int i = 0; i < sampleCount; i++)
+            int horizontalSamples = Mathf.Max(2, Mathf.CeilToInt(paddedWidth / 2.0f));
+            int verticalSamples = Mathf.Max(2, Mathf.CeilToInt(paddedHeight / 2.0f));
+            
+            // Cast rays in a grid pattern across the padded wall surface
+            for (int h = 0; h < horizontalSamples; h++)
             {
-                float t = i / (float)(sampleCount - 1);
-                Vector3 samplePoint = Vector3.Lerp(topA, topB, t);
-                
-                // Cast ray FROM camera position THROUGH the sample point on the wall top
-                Vector3 rayDirection = (samplePoint - cameraPosition).normalized;
-                Ray ray = new Ray(cameraPosition, rayDirection);
-                
-                // Cast for a reasonable distance to check for floor hits
-                float maxDistance = cameraDistance + 100f;
-                RaycastHit[] hits = Physics.RaycastAll(ray, maxDistance);
-                
-                foreach (var hit in hits)
+                for (int v = 0; v < verticalSamples; v++)
                 {
-                    // Check if hit object is THIS room's floor specifically
-                    if (hit.collider.gameObject == roomFloorObject)
+                    float tHorizontal = h / (float)(horizontalSamples - 1);
+                    float tVertical = v / (float)(verticalSamples - 1);
+                    
+                    // Interpolate position within the padded area
+                    Vector3 bottomPoint = Vector3.Lerp(offsetBottomA, offsetBottomB, tHorizontal);
+                    Vector3 topPoint = Vector3.Lerp(offsetTopA, offsetTopB, tHorizontal);
+                    Vector3 samplePoint = Vector3.Lerp(bottomPoint, topPoint, tVertical);
+                    
+                    // Offset sample point 2 units outward in the direction the wall is facing
+                    Vector3 offsetSamplePoint = samplePoint + wall.faceNormal * 2f;
+                    
+                    // Cast ray FROM camera position THROUGH the offset sample point
+                    Vector3 rayDirection = (offsetSamplePoint - cameraPosition).normalized;
+                    Ray ray = new Ray(cameraPosition, rayDirection);
+                    
+                    // Cast for a reasonable distance to check for floor hits
+                    float maxDistance = cameraDistance + 100f;
+                    RaycastHit[] hits = Physics.RaycastAll(ray, maxDistance);
+                    
+                    bool hitFloor = false;
+                    foreach (var hit in hits)
                     {
+                        // Check if hit object is THIS room's floor specifically
+                        if (hit.collider.gameObject == roomFloorObject)
+                        {
+                            hitFloor = true;
+                            break;
+                        }
+                    }
+                    
+                    // Return false if hit floor (regardless of debug drawing)
+                    if (hitFloor)
+                    {
+                        // Draw debug ray if enabled (10 second duration)
+                        if (showDebugRaycasts)
+                        {
+                            Vector3 rayEnd = cameraPosition + rayDirection * maxDistance;
+                            UnityEngine.Debug.DrawLine(cameraPosition, rayEnd, Color.red, 10f);
+                        }
                         return false; // Wall would overlap THIS room's floor from this view
+                    }
+                    else
+                    {
+                        // Draw debug ray if enabled (green for no floor hit, 10 second duration)
+                        if (showDebugRaycasts)
+                        {
+                            Vector3 rayEnd = cameraPosition + rayDirection * maxDistance;
+                            UnityEngine.Debug.DrawLine(cameraPosition, rayEnd, Color.green, 10f);
+                        }
                     }
                 }
             }

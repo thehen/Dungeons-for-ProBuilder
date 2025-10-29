@@ -35,5 +35,11 @@
         </engine:VisualElement>
         <engine:VisualElement name="door-warning" class="section"/>
         <engine:VisualElement name="settings-warning" class="section"/>
+        <engine:VisualElement name="debug-section" class="section">
+            <engine:Label text="Debug" class="section-label section-header"/>
+            <engine:VisualElement class="row" style="flex-grow: 1;">
+                <engine:Toggle name="debug-raycasts-toggle" label="Debug Raycasts" class="property-field"/>
+            </engine:VisualElement>
+        </engine:VisualElement>
     </engine:VisualElement>
 </engine:UXML>

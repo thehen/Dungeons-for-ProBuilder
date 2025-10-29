@@ -1846,24 +1846,7 @@ namespace DungeonsForProBuilderEditor
             doorMesh.transform.localRotation = Quaternion.identity;
             doorMesh.gameObject.name = "Door Mesh";
             
-            // Set up door collider as trigger
-            var doorCollider = doorMesh.GetComponent<Collider>();
-            if (doorCollider == null)
-            {
-                // Add a mesh collider if none exists
-                var meshCollider = doorMesh.gameObject.AddComponent<MeshCollider>();
-                meshCollider.convex = true;
-                meshCollider.isTrigger = true;
-                Undo.RegisterCreatedObjectUndo(meshCollider, "Build Door");
-            }
-            else
-            {
-                // Make existing collider a trigger
-                Undo.RecordObject(doorCollider, "Build Door");
-                doorCollider.isTrigger = true;
-            }
-            
-            // Perform the door operation
+            // Perform the door operation (before disabling collider - boolean op might need it)
             if (PerformDoorOperation(doorOperation, doorMesh, overlappingWalls))
             {
                 // Register all new wall meshes for undo
@@ -1873,6 +1856,15 @@ namespace DungeonsForProBuilderEditor
                     {
                         Undo.RegisterCreatedObjectUndo(newWall, "Build Door");
                     }
+                }
+                
+                // Now disable door mesh collider after boolean operation is complete
+                var doorMeshCollider = doorMesh.GetComponent<MeshCollider>();
+                if (doorMeshCollider != null)
+                {
+                    Undo.RecordObject(doorMeshCollider, "Build Door");
+                    doorMeshCollider.enabled = false;
+                    UnityEngine.Debug.Log("Door mesh collider disabled after boolean operation");
                 }
                 
                 // Select the door parent
@@ -2006,6 +1998,14 @@ namespace DungeonsForProBuilderEditor
                 doorRenderer.enabled = true;
             }
             
+            // Re-enable the door mesh collider
+            var doorMeshCollider = doorMesh.GetComponent<MeshCollider>();
+            if (doorMeshCollider != null)
+            {
+                Undo.RecordObject(doorMeshCollider, "Reset Door");
+                doorMeshCollider.enabled = true;
+            }
+            
             // Destroy the door operation component
             Undo.DestroyObjectImmediate(doorOperation);
         }
@@ -2053,21 +2053,12 @@ namespace DungeonsForProBuilderEditor
                 doorRenderer.enabled = true;
             }
             
-            // Set up door collider as trigger
-            var doorCollider = doorMesh.GetComponent<Collider>();
-            if (doorCollider == null)
+            // Disable door mesh collider (mesh colliders don't support triggers)
+            var doorMeshCollider = doorMesh.GetComponent<MeshCollider>();
+            if (doorMeshCollider != null)
             {
-                // Add a mesh collider if none exists
-                var meshCollider = doorMesh.AddComponent<MeshCollider>();
-                meshCollider.convex = true;
-                meshCollider.isTrigger = true;
-                Undo.RegisterCreatedObjectUndo(meshCollider, "Rebuild Door");
-            }
-            else
-            {
-                // Make existing collider a trigger
-                Undo.RecordObject(doorCollider, "Rebuild Door");
-                doorCollider.isTrigger = true;
+                Undo.RecordObject(doorMeshCollider, "Rebuild Door");
+                doorMeshCollider.enabled = false;
             }
             
             // Clear the door operation data but keep the component
@@ -2158,6 +2149,8 @@ namespace DungeonsForProBuilderEditor
             doorOperation.originalWalls = new GameObject[overlappingWalls.Length];
             doorOperation.newWallMeshes = new GameObject[overlappingWalls.Length];
             
+            int successCount = 0;
+            
             // Process each overlapping wall
             for (int i = 0; i < overlappingWalls.Length; i++)
             {
@@ -2186,6 +2179,7 @@ namespace DungeonsForProBuilderEditor
                     if (newWall != null)
                     {
                         UnityEngine.Debug.Log($"  Boolean subtraction SUCCESS - new wall created: {newWall.name}");
+                        successCount++;
                         
                         // Make new wall a child of the Walls parent GameObject to maintain proper hierarchy
                         var wallRoom = wall.GetComponentInParent<Room>();
@@ -2224,7 +2218,11 @@ namespace DungeonsForProBuilderEditor
                     }
                     else
                     {
-                        UnityEngine.Debug.LogWarning($"  Boolean subtraction FAILED - returned null");
+                        UnityEngine.Debug.LogWarning($"  Boolean subtraction FAILED - returned null. This can happen if:");
+                        UnityEngine.Debug.LogWarning($"    - Door and wall don't actually intersect properly");
+                        UnityEngine.Debug.LogWarning($"    - Meshes have invalid or non-manifold geometry");
+                        UnityEngine.Debug.LogWarning($"    - Door is too small or positioned at wall edge");
+                        UnityEngine.Debug.LogWarning($"  Tip: Try repositioning the door or making it slightly larger");
                     }
                 }
                 else
@@ -2247,6 +2245,14 @@ namespace DungeonsForProBuilderEditor
             // Restore original selection
             Selection.activeGameObject = originalSelection;
             
+            // Return success only if at least one wall was processed successfully
+            if (successCount == 0)
+            {
+                UnityEngine.Debug.LogError($"Door operation FAILED - no walls were successfully cut. See warnings above for details.");
+                return false;
+            }
+            
+            UnityEngine.Debug.Log($"Door operation completed: {successCount}/{overlappingWalls.Length} walls successfully cut");
             return true;
         }
         

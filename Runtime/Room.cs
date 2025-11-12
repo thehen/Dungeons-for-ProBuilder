@@ -31,6 +31,9 @@ namespace DungeonsForProBuilder
         [Tooltip("Whether the room is currently in edit mode")]
         public bool isInEditMode = false;
         
+        [HideInInspector]
+        public bool wasBuiltFromPrefab = false;
+        
         // Cached components for performance
         private ProBuilderMesh probuilderMesh;
         private MeshRenderer meshRenderer;

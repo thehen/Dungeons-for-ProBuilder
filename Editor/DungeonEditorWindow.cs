@@ -321,6 +321,9 @@ namespace DungeonsForProBuilderEditor
                             {
                                 var newWallComponent = newWall.AddComponent<RoomWall>();
                                 newWallComponent.direction = originalWallComponent.direction;
+                                newWallComponent.overrideHeight = originalWallComponent.overrideHeight;
+                                newWallComponent.customHeight = originalWallComponent.customHeight;
+                                UnityEngine.Debug.Log($"  RoomWall component copied with direction: {originalWallComponent.direction}, override={originalWallComponent.overrideHeight}, height={originalWallComponent.customHeight}");
                             }
                             
                             // Store reference in door operation
@@ -387,6 +390,10 @@ namespace DungeonsForProBuilderEditor
             Vector3 center = bounds.center;
             Vector3 size = bounds.size;
             
+            // Check if we have a stored room prefab from a previous reset
+            Transform storedRoomPrefabTransform = sourceCube.transform.Find("Stored Room Prefab");
+            GameObject storedRoomPrefab = storedRoomPrefabTransform != null ? storedRoomPrefabTransform.gameObject : null;
+            
             // Store the original parent, sibling index, and name to preserve hierarchy, order, and identity
             Transform originalParent = null;
             int originalSiblingIndex = 0;
@@ -446,7 +453,17 @@ namespace DungeonsForProBuilderEditor
             GameObject roomParent;
             
             // Check if we're using a prefab container
-            if (currentSettings != null && currentSettings.roomPrefab != null)
+            if (storedRoomPrefab != null)
+            {
+                Undo.RecordObject(storedRoomPrefab, "Build Room");
+                roomParent = storedRoomPrefab;
+                roomParent.name = originalRoomName; // Preserve the original name
+                roomParent.transform.position = sourceCube.transform.position;
+                roomParent.transform.rotation = sourceCube.transform.rotation;
+                roomParent.SetActive(true);
+                Undo.SetTransformParent(roomParent.transform, null, "Build Room");
+            }
+            else if (currentSettings != null && currentSettings.roomPrefab != null)
             {
                 // Instantiate the room prefab as the parent
                 roomParent = (GameObject)PrefabUtility.InstantiatePrefab(currentSettings.roomPrefab);
@@ -481,6 +498,7 @@ namespace DungeonsForProBuilderEditor
             // Add Room component to the parent
             var roomComponent = roomParent.AddComponent<Room>();
             Undo.RegisterCreatedObjectUndo(roomComponent, "Build Room");
+            roomComponent.wasBuiltFromPrefab = storedRoomPrefab != null || (currentSettings != null && currentSettings.roomPrefab != null);
             
             // Store any existing children of the source cube (before it becomes "Room Mesh")
             // These should be preserved and moved to be direct children of the Room container
@@ -1584,6 +1602,8 @@ namespace DungeonsForProBuilderEditor
                 UpdateStatus("Selected object is not a room. Please select a room to reset.");
                 return;
             }
+            
+            bool reusePrefab = room.wasBuiltFromPrefab;
 
             // CAPTURE wall override settings BEFORE reset destroys them
             Transform tempRoomMeshTransform = roomParent.transform.Find("Room Mesh");
@@ -1681,7 +1701,12 @@ namespace DungeonsForProBuilderEditor
                 return;
             }
 
-            // Destroy all room components (Floor, Walls, Corners, Ceiling)
+            // Store the Room parent's parent, sibling index, and name to preserve hierarchy, order, and identity
+            Transform originalParent = roomParent.transform.parent;
+            int originalSiblingIndex = roomParent.transform.GetSiblingIndex();
+            string originalRoomName = roomParent.name;
+            
+            // ALWAYS destroy all room components (Floor, Walls, Corners, Ceiling) regardless of prefab reuse
             foreach (var component in room.GetRoomComponents())
             {
                 if (component != null)
@@ -1703,22 +1728,64 @@ namespace DungeonsForProBuilderEditor
                 Undo.DestroyObjectImmediate(cornersParent.gameObject);
             }
 
-            // Store the Room parent's parent, sibling index, and name to preserve hierarchy, order, and identity
-            Transform originalParent = roomParent.transform.parent;
-            int originalSiblingIndex = roomParent.transform.GetSiblingIndex();
-            string originalRoomName = roomParent.name;
+            // Explicitly delete Floor and Ceiling GameObjects by name (in case they exist as direct children)
+            // Check both under Room Mesh and under Room parent
+            var floorUnderRoomMesh = roomMesh.transform.Find("Floor");
+            if (floorUnderRoomMesh != null)
+            {
+                Undo.DestroyObjectImmediate(floorUnderRoomMesh.gameObject);
+            }
             
-            // Remove the Room component
+            var ceilingUnderRoomMesh = roomMesh.transform.Find("Ceiling");
+            if (ceilingUnderRoomMesh != null)
+            {
+                Undo.DestroyObjectImmediate(ceilingUnderRoomMesh.gameObject);
+            }
+            
+            var floorUnderRoom = roomParent.transform.Find("Floor");
+            if (floorUnderRoom != null)
+            {
+                Undo.DestroyObjectImmediate(floorUnderRoom.gameObject);
+            }
+            
+            var ceilingUnderRoom = roomParent.transform.Find("Ceiling");
+            if (ceilingUnderRoom != null)
+            {
+                Undo.DestroyObjectImmediate(ceilingUnderRoom.gameObject);
+            }
+            
+            // Also check for Walls and Corners as direct children of Room (shouldn't happen, but just in case)
+            var wallsUnderRoom = roomParent.transform.Find("Walls");
+            if (wallsUnderRoom != null)
+            {
+                Undo.DestroyObjectImmediate(wallsUnderRoom.gameObject);
+            }
+            
+            var cornersUnderRoom = roomParent.transform.Find("Corners");
+            if (cornersUnderRoom != null)
+            {
+                Undo.DestroyObjectImmediate(cornersUnderRoom.gameObject);
+            }
+
+            // Remove the Room component (we'll add it back when rebuilding if reusing prefab)
             Undo.DestroyObjectImmediate(room);
 
-            // Move all direct children of Room (except Room Mesh) to become children of Room Mesh
+            // Move all direct children of Room (except Room Mesh and room components) to become children of Room Mesh
             // This preserves the hierarchy so they can be moved back when rebuilding
+            // Exclude: Room Mesh, Floor, Ceiling, Walls, Corners, and Stored Room Prefab
             var directChildrenToKeep = new System.Collections.Generic.List<Transform>();
             foreach (Transform child in roomParent.transform)
             {
                 if (child != roomMeshTransform)
                 {
-                    directChildrenToKeep.Add(child);
+                    string childName = child.name;
+                    // Don't move room component GameObjects - they should have been deleted
+                    if (childName != "Floor" && childName != "Ceiling" && 
+                        childName != "Walls" && childName != "Corners" &&
+                        childName != "Stored Room Prefab")
+                    {
+                        directChildrenToKeep.Add(child);
+                    }
                 }
             }
             
@@ -1760,8 +1827,15 @@ namespace DungeonsForProBuilderEditor
             if (meshRenderer != null) meshRenderer.enabled = true;
             if (meshCollider != null) meshCollider.enabled = true;
             
-            // Destroy the room parent (whether it's a prefab or just "Room" GameObject)
-            Undo.DestroyObjectImmediate(roomParent);
+            if (reusePrefab)
+            {
+                StoreRoomPrefabForRebuild(roomParent, roomMesh);
+            }
+            else
+            {
+                // Destroy the room parent (whether it's a prefab or just "Room" GameObject)
+                Undo.DestroyObjectImmediate(roomParent);
+            }
             
             // Select the ProBuilder mesh
             Selection.activeGameObject = roomMesh;
@@ -1990,6 +2064,10 @@ namespace DungeonsForProBuilderEditor
                 return;
             }
             
+            // Check if we have a stored door prefab from a previous reset
+            Transform storedDoorPrefabTransform = selectedObject.transform.Find("Stored Door Prefab");
+            GameObject storedDoorPrefab = storedDoorPrefabTransform != null ? storedDoorPrefabTransform.gameObject : null;
+            
             // If this door already has a DoorOperation, reset it first
             var existingDoorOp = selectedObject.GetComponent<DoorOperation>();
             if (existingDoorOp != null)
@@ -2005,8 +2083,10 @@ namespace DungeonsForProBuilderEditor
                     // Move the Door Mesh back to root
                     Undo.SetTransformParent(existingDoorMesh.transform, null, "Reset Door");
                     
-                    // Destroy the door parent
-                    Undo.DestroyObjectImmediate(existingDoorOp.gameObject);
+                    // Store the existing prefab for reuse
+                    StoreDoorPrefabForRebuild(existingDoorOp.gameObject, existingDoorMesh);
+                    storedDoorPrefabTransform = existingDoorMesh.transform.Find("Stored Door Prefab");
+                    storedDoorPrefab = storedDoorPrefabTransform != null ? storedDoorPrefabTransform.gameObject : null;
                     
                     // Now the doorMesh we were going to use needs to reference this reset mesh
                     doorMesh = existingDoorMesh.GetComponent<ProBuilderMesh>();
@@ -2048,11 +2128,20 @@ namespace DungeonsForProBuilderEditor
                 Undo.RegisterCreatedObjectUndo(doorsContainer, "Build Door");
             }
             
-            // Create the parent GameObject structure
+            // Create or reuse the parent GameObject structure
             GameObject doorParent;
             
-            // Check if we're using a prefab container
-            if (currentSettings != null && currentSettings.doorPrefab != null)
+            if (storedDoorPrefab != null)
+            {
+                Undo.RecordObject(storedDoorPrefab, "Build Door");
+                doorParent = storedDoorPrefab;
+                doorParent.name = doorName;
+                doorParent.transform.position = doorMesh.transform.position;
+                doorParent.transform.rotation = doorMesh.transform.rotation;
+                doorParent.SetActive(true);
+                Undo.SetTransformParent(doorParent.transform, doorsContainer.transform, "Build Door");
+            }
+            else if (currentSettings != null && currentSettings.doorPrefab != null)
             {
                 // Instantiate the door prefab as the parent
                 doorParent = (GameObject)PrefabUtility.InstantiatePrefab(currentSettings.doorPrefab);
@@ -2173,8 +2262,8 @@ namespace DungeonsForProBuilderEditor
             // Move the Door Mesh back to root
             Undo.SetTransformParent(doorMesh.transform, null, "Reset Door");
             
-            // Destroy the door parent (whether it's a prefab or just "Door" GameObject)
-            Undo.DestroyObjectImmediate(doorParent);
+            // Store the previous prefab as a disabled child for reuse
+            StoreDoorPrefabForRebuild(doorParent, doorMesh);
             
             // Select the ProBuilder mesh
             Selection.activeGameObject = doorMesh;
@@ -2244,6 +2333,60 @@ namespace DungeonsForProBuilderEditor
             
             // Destroy the door operation component
             Undo.DestroyObjectImmediate(doorOperation);
+        }
+        
+        private void StoreRoomPrefabForRebuild(GameObject roomParent, GameObject roomMesh)
+        {
+            if (roomParent == null || roomMesh == null) return;
+            if (roomParent == roomMesh) return;
+            
+            // Remove the Room component so it can be re-added cleanly later
+            var existingRoomComponent = roomParent.GetComponent<Room>();
+            if (existingRoomComponent != null)
+            {
+                Undo.DestroyObjectImmediate(existingRoomComponent);
+            }
+            
+            // Re-parent under the room mesh and disable for reuse
+            Undo.RecordObject(roomParent.transform, "Reset Room");
+            Undo.SetTransformParent(roomParent.transform, roomMesh.transform, "Reset Room");
+            roomParent.transform.localPosition = Vector3.zero;
+            roomParent.transform.localRotation = Quaternion.identity;
+            roomParent.transform.localScale = Vector3.one;
+            roomParent.name = "Stored Room Prefab";
+            roomParent.SetActive(false);
+            
+#if UNITY_EDITOR
+            EditorUtility.SetDirty(roomParent);
+            EditorUtility.SetDirty(roomMesh);
+#endif
+        }
+        
+        private void StoreDoorPrefabForRebuild(GameObject doorParent, GameObject doorMesh)
+        {
+            if (doorParent == null || doorMesh == null) return;
+            if (doorParent == doorMesh) return;
+            
+            // Ensure any DoorOperation component is removed
+            var existingDoorOp = doorParent.GetComponent<DoorOperation>();
+            if (existingDoorOp != null)
+            {
+                Undo.DestroyObjectImmediate(existingDoorOp);
+            }
+            
+            // Re-parent the prefab under the door mesh and disable it for reuse
+            Undo.RecordObject(doorParent.transform, "Reset Door");
+            Undo.SetTransformParent(doorParent.transform, doorMesh.transform, "Reset Door");
+            doorParent.transform.localPosition = Vector3.zero;
+            doorParent.transform.localRotation = Quaternion.identity;
+            doorParent.transform.localScale = Vector3.one;
+            doorParent.name = "Stored Door Prefab";
+            doorParent.SetActive(false);
+            
+#if UNITY_EDITOR
+            EditorUtility.SetDirty(doorParent);
+            EditorUtility.SetDirty(doorMesh);
+#endif
         }
         
         /// <summary>
@@ -2447,7 +2590,9 @@ namespace DungeonsForProBuilderEditor
                         {
                             var newWallComponent = newWall.AddComponent<RoomWall>();
                             newWallComponent.direction = originalWallComponent.direction;
-                            UnityEngine.Debug.Log($"  RoomWall component copied with direction: {originalWallComponent.direction}");
+                            newWallComponent.overrideHeight = originalWallComponent.overrideHeight;
+                            newWallComponent.customHeight = originalWallComponent.customHeight;
+                            UnityEngine.Debug.Log($"  RoomWall component copied with direction: {originalWallComponent.direction}, override={originalWallComponent.overrideHeight}, height={originalWallComponent.customHeight}");
                         }
                         
                         doorOperation.newWallMeshes[i] = newWall;

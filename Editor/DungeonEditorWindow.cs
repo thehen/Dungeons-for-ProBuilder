@@ -3527,6 +3527,17 @@ namespace DungeonsForProBuilderEditor
             {
                 return false;
             }
+
+            // Get floor bounds so we can treat the floor as a thin visual surface,
+            // regardless of how thick its collider actually is.
+            var floorRenderer = roomFloorObject.GetComponent<Renderer>();
+            Bounds floorBounds = floorRenderer != null ? floorRenderer.bounds : new Bounds(roomFloorObject.transform.position, Vector3.zero);
+            float floorTopY = floorBounds.max.y;
+            // Limit the effective collision thickness used for \"overlap\" checks.
+            // Even if the actual floor is very thick, we only consider hits in the
+            // top slice of the collider as true visual overlaps.
+            float effectiveFloorThickness = 0.25f;
+            float effectiveFloorMinY = floorTopY - effectiveFloorThickness;
             
             // Calculate wall corners
             Vector3 bottomA = wall.start;
@@ -3546,6 +3557,24 @@ namespace DungeonsForProBuilderEditor
             float topPadding = Mathf.Min(padding, wallHeight * 0.4f);
             Vector3 paddedTopA = topA - Vector3.up * topPadding;
             Vector3 paddedTopB = topB - Vector3.up * topPadding;
+
+            // Ensure the entire sampled wall area starts just above the visible top of the floor,
+            // regardless of floor thickness. Without this, increasing floor height can cause
+            // the lower part of the sampling rectangle to sit inside the floor volume.
+            float minPaddedBottomY = Mathf.Min(paddedBottomA.y, paddedBottomB.y);
+            float desiredMinY = floorTopY + 0.1f; // small clearance above the floor surface
+            if (minPaddedBottomY < desiredMinY)
+            {
+                float lift = desiredMinY - minPaddedBottomY;
+                paddedBottomA += Vector3.up * lift;
+                paddedBottomB += Vector3.up * lift;
+                paddedTopA += Vector3.up * lift;
+                paddedTopB += Vector3.up * lift;
+
+                LogDebug(
+                    $"[BackWallRaySetup] wallIndex={wallIndex}, lifted sample area by {lift:F3} so " +
+                    $"bottomY from {minPaddedBottomY:F3} to {desiredMinY:F3}, floorTopY={floorTopY:F3}");
+            }
             
             // Left/Right padding: inset 2 units from each end along the wall
             float horizontalPadding = Mathf.Min(padding, wall.length * 0.4f);
@@ -3600,8 +3629,23 @@ namespace DungeonsForProBuilderEditor
                         // Check if hit object is THIS room's floor specifically
                         if (hit.collider.gameObject == roomFloorObject)
                         {
-                            hitFloor = true;
-                            break;
+                            // Only treat this as an overlap if the hit point lies within the
+                            // effective top slice of the floor, so that thicker floors
+                            // don't unfairly classify more walls as \"front\".
+                            if (hit.point.y >= effectiveFloorMinY && hit.point.y <= floorTopY + 0.01f)
+                            {
+                                hitFloor = true;
+
+                                // Optional detailed debug to understand why a wall is classified as front/back.
+                                // This is gated by the Debug Logs toggle to avoid log spam.
+                                LogDebug(
+                                    $"[BackWallRay] wallIndex={wallIndex}, " +
+                                    $"sample(h={h}/{horizontalSamples - 1}, v={v}/{verticalSamples - 1}), " +
+                                    $"hitPoint={hit.point}, floorTopY={floorTopY:F3}, " +
+                                    $"effectiveYRange=[{effectiveFloorMinY:F3}, {floorTopY + 0.01f:F3}]");
+
+                                break;
+                            }
                         }
                     }
                     

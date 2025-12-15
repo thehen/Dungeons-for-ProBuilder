@@ -20,7 +20,17 @@ namespace DungeonsForProBuilder
         
         [Tooltip("New wall meshes created from boolean operations")]
         public GameObject[] newWallMeshes;
+
+        [Header("Editor State")]
+        [Tooltip("Original parent transform of the door mesh in the hierarchy")]
+        [HideInInspector] public Transform originalParent;
         
+        [Tooltip("Original sibling index of the door mesh under its parent")]
+        [HideInInspector] public int originalSiblingIndex;
+        
+        [Tooltip("Original name of the door mesh GameObject")]
+        [HideInInspector] public string originalDoorName;
+
         [Header("Auto-Rebuild Settings")]
         [Tooltip("Automatically rebuild door when moved")]
         public bool autoRebuildOnMove = true;

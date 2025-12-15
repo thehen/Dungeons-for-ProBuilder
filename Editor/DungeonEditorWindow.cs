@@ -2149,9 +2149,10 @@ namespace DungeonsForProBuilderEditor
                 return;
             }
             
-            // Check if we have a stored door prefab from a previous reset
-            Transform storedDoorPrefabTransform = selectedObject.transform.Find("Stored Door Prefab");
-            GameObject storedDoorPrefab = storedDoorPrefabTransform != null ? storedDoorPrefabTransform.gameObject : null;
+            // Capture the original hierarchy and name so we can preserve them
+            Transform originalParent = doorMesh.transform.parent;
+            int originalSiblingIndex = doorMesh.transform.GetSiblingIndex();
+            string originalDoorName = doorMesh.gameObject.name;
             
             // If this door already has a DoorOperation, reset it first
             var existingDoorOp = selectedObject.GetComponent<DoorOperation>();
@@ -2165,16 +2166,11 @@ namespace DungeonsForProBuilderEditor
                 {
                     ResetDoor(existingDoorOp, existingDoorMesh);
                     
-                    // Move the Door Mesh back to root
-                    Undo.SetTransformParent(existingDoorMesh.transform, null, "Reset Door");
-                    
-                    // Store the existing prefab for reuse
-                    StoreDoorPrefabForRebuild(existingDoorOp.gameObject, existingDoorMesh);
-                    storedDoorPrefabTransform = existingDoorMesh.transform.Find("Stored Door Prefab");
-                    storedDoorPrefab = storedDoorPrefabTransform != null ? storedDoorPrefabTransform.gameObject : null;
-                    
-                    // Now the doorMesh we were going to use needs to reference this reset mesh
+                    // After reset, use this mesh as the active door mesh while preserving its hierarchy
                     doorMesh = existingDoorMesh.GetComponent<ProBuilderMesh>();
+                    originalParent = doorMesh.transform.parent;
+                    originalSiblingIndex = doorMesh.transform.GetSiblingIndex();
+                    originalDoorName = doorMesh.gameObject.name;
                 }
             }
             
@@ -2194,67 +2190,42 @@ namespace DungeonsForProBuilderEditor
                 Undo.RegisterCompleteObjectUndo(wall, "Build Door");
             }
             
-            // Determine door name based on overlapping wall directions
-            string doorName = "Door";
-            if (overlappingWalls.Length > 0)
-            {
-                var firstWallComponent = overlappingWalls[0].GetComponent<RoomWall>();
-                if (firstWallComponent != null)
-                {
-                    doorName = firstWallComponent.direction.ToString() + " Door";
-                }
-            }
-            
-            // Get or create "Doors" GameObject at root level
-            GameObject doorsContainer = GameObject.Find("Doors");
-            if (doorsContainer == null)
-            {
-                doorsContainer = new GameObject("Doors");
-                Undo.RegisterCreatedObjectUndo(doorsContainer, "Build Door");
-            }
-            
             // Create or reuse the parent GameObject structure
             GameObject doorParent;
             
-            if (storedDoorPrefab != null)
-            {
-                Undo.RecordObject(storedDoorPrefab, "Build Door");
-                doorParent = storedDoorPrefab;
-                doorParent.name = doorName;
-                doorParent.transform.position = doorMesh.transform.position;
-                doorParent.transform.rotation = doorMesh.transform.rotation;
-                doorParent.SetActive(true);
-                Undo.SetTransformParent(doorParent.transform, doorsContainer.transform, "Build Door");
-            }
-            else if (currentSettings != null && currentSettings.doorPrefab != null)
+            if (currentSettings != null && currentSettings.doorPrefab != null)
             {
                 // Instantiate the door prefab as the parent
                 doorParent = (GameObject)PrefabUtility.InstantiatePrefab(currentSettings.doorPrefab);
-                doorParent.name = doorName;
+                doorParent.name = originalDoorName;
                 doorParent.transform.position = doorMesh.transform.position;
                 doorParent.transform.rotation = doorMesh.transform.rotation;
-                doorParent.transform.SetParent(doorsContainer.transform);
+                doorParent.transform.SetParent(originalParent);
+                doorParent.transform.SetSiblingIndex(originalSiblingIndex);
                 Undo.RegisterCreatedObjectUndo(doorParent, "Build Door");
             }
             else
             {
                 // Create a new parent GameObject
-                doorParent = new GameObject(doorName);
+                doorParent = new GameObject(originalDoorName);
                 doorParent.transform.position = doorMesh.transform.position;
                 doorParent.transform.rotation = doorMesh.transform.rotation;
-                doorParent.transform.SetParent(doorsContainer.transform);
+                doorParent.transform.SetParent(originalParent);
+                doorParent.transform.SetSiblingIndex(originalSiblingIndex);
                 Undo.RegisterCreatedObjectUndo(doorParent, "Build Door");
             }
             
             // Add DoorOperation component to the parent
             var doorOperation = doorParent.AddComponent<DoorOperation>();
             Undo.RegisterCreatedObjectUndo(doorOperation, "Build Door");
+            doorOperation.originalParent = originalParent;
+            doorOperation.originalSiblingIndex = originalSiblingIndex;
+            doorOperation.originalDoorName = originalDoorName;
             
             // Make the door mesh a child and rename it to "Door Mesh"
             Undo.SetTransformParent(doorMesh.transform, doorParent.transform, "Build Door");
             doorMesh.transform.localPosition = Vector3.zero;
             doorMesh.transform.localRotation = Quaternion.identity;
-            doorMesh.gameObject.name = "Door Mesh";
             
             // Perform the door operation (before disabling collider - boolean op might need it)
             if (PerformDoorOperation(doorOperation, doorMesh, overlappingWalls))
@@ -2342,13 +2313,26 @@ namespace DungeonsForProBuilderEditor
                 return;
             }
             
+            // Reset the door operation (restores walls, renderer, collider, etc.)
             ResetDoor(doorOperation, doorMesh);
             
-            // Move the Door Mesh back to root
-            Undo.SetTransformParent(doorMesh.transform, null, "Reset Door");
+            // Preserve the CURRENT hierarchy and name of the door parent.
+            // This way, if the user has moved/renamed the door parent since it was built,
+            // a reset will keep it in the same place in the hierarchy with the same name.
+            Transform restoreParent = doorParent.transform.parent;
+            int restoreSiblingIndex = doorParent.transform.GetSiblingIndex();
+            string restoreName = doorParent.name;
             
-            // Store the previous prefab as a disabled child for reuse
-            StoreDoorPrefabForRebuild(doorParent, doorMesh);
+            // Move the mesh out of the door container and into the preserved location.
+            Undo.SetTransformParent(doorMesh.transform, restoreParent, "Reset Door");
+            doorMesh.transform.SetSiblingIndex(restoreSiblingIndex);
+            doorMesh.gameObject.name = restoreName;
+            
+            // Destroy the container parent that was created for the door
+            if (doorParent != null)
+            {
+                Undo.DestroyObjectImmediate(doorParent);
+            }
             
             // Select the ProBuilder mesh
             Selection.activeGameObject = doorMesh;
@@ -2447,32 +2431,8 @@ namespace DungeonsForProBuilderEditor
 #endif
         }
         
-        private void StoreDoorPrefabForRebuild(GameObject doorParent, GameObject doorMesh)
-        {
-            if (doorParent == null || doorMesh == null) return;
-            if (doorParent == doorMesh) return;
-            
-            // Ensure any DoorOperation component is removed
-            var existingDoorOp = doorParent.GetComponent<DoorOperation>();
-            if (existingDoorOp != null)
-            {
-                Undo.DestroyObjectImmediate(existingDoorOp);
-            }
-            
-            // Re-parent the prefab under the door mesh and disable it for reuse
-            Undo.RecordObject(doorParent.transform, "Reset Door");
-            Undo.SetTransformParent(doorParent.transform, doorMesh.transform, "Reset Door");
-            doorParent.transform.localPosition = Vector3.zero;
-            doorParent.transform.localRotation = Quaternion.identity;
-            doorParent.transform.localScale = Vector3.one;
-            doorParent.name = "Stored Door Prefab";
-            doorParent.SetActive(false);
-            
-#if UNITY_EDITOR
-            EditorUtility.SetDirty(doorParent);
-            EditorUtility.SetDirty(doorMesh);
-#endif
-        }
+        // StoreDoorPrefabForRebuild is no longer used; door builds now preserve the
+        // original hierarchy and do not rely on a hidden stored prefab.
         
         /// <summary>
         /// Rebuilds a door operation when it's moved

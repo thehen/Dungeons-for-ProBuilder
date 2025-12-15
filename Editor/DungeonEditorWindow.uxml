@@ -40,6 +40,9 @@
             <engine:VisualElement class="row" style="flex-grow: 1;">
                 <engine:Toggle name="debug-raycasts-toggle" label="Debug Raycasts" class="property-field"/>
             </engine:VisualElement>
+            <engine:VisualElement class="row" style="flex-grow: 1;">
+                <engine:Toggle name="debug-logs-toggle" label="Debug Logs" class="property-field"/>
+            </engine:VisualElement>
         </engine:VisualElement>
     </engine:VisualElement>
 </engine:UXML>

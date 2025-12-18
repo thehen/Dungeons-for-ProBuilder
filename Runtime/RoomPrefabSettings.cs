@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.ProBuilder;
 
 namespace DungeonsForProBuilder
 {
@@ -70,6 +71,19 @@ namespace DungeonsForProBuilder
         [Tooltip("Additional height added above the tallest connecting wall")]
         [Min(0.0f)] public float cornerHeightOffset = 0.5f;
 
+        [Header("Materials")]
+        [Tooltip("Material to apply to generated floor meshes (defaults to ProBuilder's default material if not set)")]
+        public Material floorMaterial;
+        
+        [Tooltip("Material to apply to generated ceiling meshes (defaults to ProBuilder's default material if not set)")]
+        public Material ceilingMaterial;
+        
+        [Tooltip("Material to apply to generated wall meshes (defaults to ProBuilder's default material if not set)")]
+        public Material wallMaterial;
+
+        [Tooltip("Material to apply to generated corner meshes (defaults to ProBuilder's default material if not set)")]
+        public Material cornersMaterial;
+
         [Header("Layers")]
         [Tooltip("Layer to assign to floor objects")]
         public int floorLayer = 0; 
@@ -82,6 +96,40 @@ namespace DungeonsForProBuilder
         
         [Tooltip("Layer to assign to corner objects")]
         public int cornersLayer = 0;
+
+        private void OnEnable()
+        {
+            EnsureDefaultMaterials();
+        }
+
+        private void OnValidate()
+        {
+            EnsureDefaultMaterials();
+        }
+
+        private void EnsureDefaultMaterials()
+        {
+            // Use ProBuilder's built-in default material when none is specified
+            if (floorMaterial == null)
+            {
+                floorMaterial = BuiltinMaterials.defaultMaterial;
+            }
+
+            if (ceilingMaterial == null)
+            {
+                ceilingMaterial = BuiltinMaterials.defaultMaterial;
+            }
+
+            if (wallMaterial == null)
+            {
+                wallMaterial = BuiltinMaterials.defaultMaterial;
+            }
+
+            if (cornersMaterial == null)
+            {
+                cornersMaterial = BuiltinMaterials.defaultMaterial;
+            }
+        }
     }
 }
 

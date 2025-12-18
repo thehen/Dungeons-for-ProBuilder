@@ -62,6 +62,13 @@
                 <engine:FloatField binding-path="cornerHeightOffset" class="w1"/>
             </engine:VisualElement>
         </engine:VisualElement>
+        <engine:Label text="Materials" class="section-header"/>
+        <engine:VisualElement name="Row" class="row">
+            <editor:ObjectField label="Floor" binding-path="floorMaterial" type="UnityEngine.Material, UnityEngine.CoreModule" class="w1"/>
+            <editor:ObjectField label="Ceiling" binding-path="ceilingMaterial" type="UnityEngine.Material, UnityEngine.CoreModule" class="w1"/>
+            <editor:ObjectField label="Walls" binding-path="wallMaterial" type="UnityEngine.Material, UnityEngine.CoreModule" class="w1"/>
+            <editor:ObjectField label="Corners" binding-path="cornersMaterial" type="UnityEngine.Material, UnityEngine.CoreModule" class="w1"/>
+        </engine:VisualElement>
         <engine:Label text="Layers" class="section-header"/>
         <engine:VisualElement name="Row" class="row">
             <editor:LayerField label="Floor" binding-path="floorLayer" class="w1"/>

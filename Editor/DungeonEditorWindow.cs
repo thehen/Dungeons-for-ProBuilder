@@ -262,6 +262,9 @@ namespace DungeonsForProBuilderEditor
             if (roomParent != null)
             {
                 AutoBuildDoorsInRoom(roomParent);
+
+                // Always (re)apply materials from current settings to all generated geometry
+                ApplyMaterialsToRoom(roomParent);
                 
                 // Mark the object as dirty for undo
                 EditorUtility.SetDirty(roomParent);
@@ -846,12 +849,12 @@ namespace DungeonsForProBuilderEditor
                             EditorUtility.SetDirty(wallObj.transform);
 #endif
                             
-                            LogDebug($"Restored height override settings for wall '{wallObj.name}': override={overrideHeight}, height={customHeight}");
+                            UnityEngine.Debug.Log($"Restored height override settings for wall '{wallObj.name}': override={overrideHeight}, height={customHeight}");
                         }
                     }
                     else
                     {
-                        LogDebug($"No override found for wall '{wallObj.name}' in dictionary. Available keys: {string.Join(", ", wallOverrides.Keys)}");
+                        UnityEngine.Debug.Log($"No override found for wall '{wallObj.name}' in dictionary. Available keys: {string.Join(", ", wallOverrides.Keys)}");
                     }
                 }
                 
@@ -1207,12 +1210,21 @@ namespace DungeonsForProBuilderEditor
             floorMesh.ToMesh();
             floorMesh.Refresh(RefreshMask.All);
             
-            // Copy materials from original mesh
+            // Apply material
             var originalRenderer = parent.GetComponent<MeshRenderer>();
             var floorRenderer = go.GetComponent<MeshRenderer>();
-            if (originalRenderer != null && floorRenderer != null)
+            if (floorRenderer != null)
             {
-                floorRenderer.sharedMaterials = originalRenderer.sharedMaterials;
+                // Prefer explicitly configured floor material if set
+                if (currentSettings.floorMaterial != null)
+                {
+                    floorRenderer.sharedMaterial = currentSettings.floorMaterial;
+                }
+                else if (originalRenderer != null)
+                {
+                    // Fallback to copying materials from the original mesh
+                    floorRenderer.sharedMaterials = originalRenderer.sharedMaterials;
+                }
             }
             
             // Position the floor at the same Y level as the original cube
@@ -1267,6 +1279,23 @@ namespace DungeonsForProBuilderEditor
             if (probuilderMesh != null)
             {
                 ResizeProBuilderMesh(probuilderMesh, size);
+                
+                // Apply material override for walls when configured (use ProBuilder API)
+                if (currentSettings != null && currentSettings.wallMaterial != null)
+                {
+                    probuilderMesh.SetMaterial(probuilderMesh.faces, currentSettings.wallMaterial);
+                    probuilderMesh.ToMesh();
+                    probuilderMesh.Refresh();
+                }
+            }
+            else
+            {
+                // For non-ProBuilder meshes (prefabs), use MeshRenderer
+                var wallRenderer = go.GetComponent<MeshRenderer>();
+                if (wallRenderer != null && currentSettings != null && currentSettings.wallMaterial != null)
+                {
+                    wallRenderer.sharedMaterial = currentSettings.wallMaterial;
+                }
             }
             
             // Add wall component with direction
@@ -1293,7 +1322,7 @@ namespace DungeonsForProBuilderEditor
                 var boxCollider = go.AddComponent<BoxCollider>();
                 Undo.RegisterCreatedObjectUndo(boxCollider, "Build Room");
             }
-            
+
             // Set layer
             go.layer = currentSettings.wallsLayer;
             
@@ -1361,12 +1390,21 @@ namespace DungeonsForProBuilderEditor
             ceilingMesh.ToMesh();
             ceilingMesh.Refresh(RefreshMask.All);
             
-            // Copy materials from original mesh
+            // Apply material
             var originalRenderer = parent.GetComponent<MeshRenderer>();
             var ceilingRenderer = go.GetComponent<MeshRenderer>();
-            if (originalRenderer != null && ceilingRenderer != null)
+            if (ceilingRenderer != null)
             {
-                ceilingRenderer.sharedMaterials = originalRenderer.sharedMaterials;
+                // Prefer explicitly configured ceiling material if set
+                if (currentSettings.ceilingMaterial != null)
+                {
+                    ceilingRenderer.sharedMaterial = currentSettings.ceilingMaterial;
+                }
+                else if (originalRenderer != null)
+                {
+                    // Fallback to copying materials from the original mesh
+                    ceilingRenderer.sharedMaterials = originalRenderer.sharedMaterials;
+                }
             }
             
             // Position the ceiling at the same Y level as the original cube
@@ -1421,6 +1459,23 @@ namespace DungeonsForProBuilderEditor
             if (probuilderMesh != null)
             {
                 ResizeProBuilderMesh(probuilderMesh, size);
+
+                // Apply material override for corners when configured (use ProBuilder API)
+                if (currentSettings != null && currentSettings.cornersMaterial != null)
+                {
+                    probuilderMesh.SetMaterial(probuilderMesh.faces, currentSettings.cornersMaterial);
+                    probuilderMesh.ToMesh();
+                    probuilderMesh.Refresh();
+                }
+            }
+            else
+            {
+                // For non-ProBuilder meshes (prefabs), use MeshRenderer
+                var cornerRenderer = go.GetComponent<MeshRenderer>();
+                if (cornerRenderer != null && currentSettings != null && currentSettings.cornersMaterial != null)
+                {
+                    cornerRenderer.sharedMaterial = currentSettings.cornersMaterial;
+                }
             }
             
             // Add corner component with direction
@@ -1452,6 +1507,75 @@ namespace DungeonsForProBuilderEditor
             go.layer = currentSettings.cornersLayer;
             
             return go;
+        }
+
+        /// <summary>
+        /// Applies the current RoomPrefabSettings materials to all generated components in a room,
+        /// including previously generated walls and corners. This ensures that changing materials
+        /// and rebuilding a room always updates existing geometry.
+        /// </summary>
+        private void ApplyMaterialsToRoom(GameObject roomParent)
+        {
+            if (currentSettings == null || roomParent == null)
+                return;
+
+            var room = roomParent.GetComponent<Room>();
+            if (room == null)
+                return;
+
+            // Apply wall material
+            if (currentSettings.wallMaterial != null)
+            {
+                var walls = roomParent.GetComponentsInChildren<RoomWall>(true);
+                foreach (var wall in walls)
+                {
+                    if (wall == null) continue;
+                    var go = wall.gameObject;
+
+                    var pb = go.GetComponent<ProBuilderMesh>();
+                    if (pb != null)
+                    {
+                        pb.SetMaterial(pb.faces, currentSettings.wallMaterial);
+                        pb.ToMesh();
+                        pb.Refresh();
+                    }
+                    else
+                    {
+                        var renderer = go.GetComponent<MeshRenderer>();
+                        if (renderer != null)
+                        {
+                            renderer.sharedMaterial = currentSettings.wallMaterial;
+                        }
+                    }
+                }
+            }
+
+            // Apply corner material
+            if (currentSettings.cornersMaterial != null)
+            {
+                var corners = roomParent.GetComponentsInChildren<RoomCorner>(true);
+                foreach (var corner in corners)
+                {
+                    if (corner == null) continue;
+                    var go = corner.gameObject;
+
+                    var pb = go.GetComponent<ProBuilderMesh>();
+                    if (pb != null)
+                    {
+                        pb.SetMaterial(pb.faces, currentSettings.cornersMaterial);
+                        pb.ToMesh();
+                        pb.Refresh();
+                    }
+                    else
+                    {
+                        var renderer = go.GetComponent<MeshRenderer>();
+                        if (renderer != null)
+                        {
+                            renderer.sharedMaterial = currentSettings.cornersMaterial;
+                        }
+                    }
+                }
+            }
         }
         
         private float GetComponentHeight(SizeMode mode, float customValue, float defaultValue)
@@ -1527,7 +1651,7 @@ namespace DungeonsForProBuilderEditor
                     if (method != null)
                     {
                         method.Invoke(hierarchyWindow, new object[] { go.GetInstanceID(), false });
-                        LogDebug($"[CollapseHierarchy] Collapsed '{go.name}' in hierarchy");
+                        UnityEngine.Debug.Log($"[CollapseHierarchy] Collapsed '{go.name}' in hierarchy");
                     }
                 }
             }
@@ -1710,14 +1834,14 @@ namespace DungeonsForProBuilderEditor
                             // Format: wallName|overrideEnabled|customHeight
                             string data = $"{wallTransform.name}|{wallComp.overrideHeight}|{wallComp.customHeight}";
                             overrideData.Add(data);
-                            LogDebug($"[ResetRoom] Captured override for '{wallTransform.name}': override={wallComp.overrideHeight}, height={wallComp.customHeight}");
+                            UnityEngine.Debug.Log($"[ResetRoom] Captured override for '{wallTransform.name}': override={wallComp.overrideHeight}, height={wallComp.customHeight}");
                         }
                     }
                     
                     if (overrideData.Count > 0)
                     {
                         EditorPrefs.SetString("TempWallOverrides", string.Join(";", overrideData));
-                        LogDebug($"[ResetRoom] Saved {overrideData.Count} wall overrides to EditorPrefs");
+                        UnityEngine.Debug.Log($"[ResetRoom] Saved {overrideData.Count} wall overrides to EditorPrefs");
                     }
                 }
             }
@@ -1879,7 +2003,7 @@ namespace DungeonsForProBuilderEditor
             {
                 if (child != null)
                 {
-                    LogDebug($"[ResetRoom] Preserving direct child as child of Room Mesh: {child.name}");
+                    UnityEngine.Debug.Log($"[ResetRoom] Preserving direct child as child of Room Mesh: {child.name}");
                     Undo.SetTransformParent(child, roomMeshTransform, "Reset Room");
                 }
             }
@@ -1887,18 +2011,18 @@ namespace DungeonsForProBuilderEditor
             // Move the Room Mesh to the original parent (preserving hierarchy)
             if (originalParent != null)
             {
-                LogDebug($"[ResetRoom] Restoring Room Mesh to parent: {originalParent.name} at index {originalSiblingIndex}");
+                UnityEngine.Debug.Log($"[ResetRoom] Restoring Room Mesh to parent: {originalParent.name} at index {originalSiblingIndex}");
             }
             else
             {
-                LogDebug($"[ResetRoom] Room Mesh staying at root (was at root) at index {originalSiblingIndex}");
+                UnityEngine.Debug.Log($"[ResetRoom] Room Mesh staying at root (was at root) at index {originalSiblingIndex}");
             }
             Undo.SetTransformParent(roomMesh.transform, originalParent, "Reset Room");
             roomMesh.transform.SetSiblingIndex(originalSiblingIndex);
             
             // Restore the original Room name to the Room Mesh
             roomMesh.name = originalRoomName;
-            LogDebug($"[ResetRoom] Restored name: {originalRoomName}");
+            UnityEngine.Debug.Log($"[ResetRoom] Restored name: {originalRoomName}");
             
             // Clear all debug lines (lines will be cleared on next scene refresh)
             UnityEditor.SceneView.RepaintAll();
@@ -2149,10 +2273,9 @@ namespace DungeonsForProBuilderEditor
                 return;
             }
             
-            // Capture the original hierarchy and name so we can preserve them
-            Transform originalParent = doorMesh.transform.parent;
-            int originalSiblingIndex = doorMesh.transform.GetSiblingIndex();
-            string originalDoorName = doorMesh.gameObject.name;
+            // Check if we have a stored door prefab from a previous reset
+            Transform storedDoorPrefabTransform = selectedObject.transform.Find("Stored Door Prefab");
+            GameObject storedDoorPrefab = storedDoorPrefabTransform != null ? storedDoorPrefabTransform.gameObject : null;
             
             // If this door already has a DoorOperation, reset it first
             var existingDoorOp = selectedObject.GetComponent<DoorOperation>();
@@ -2166,11 +2289,16 @@ namespace DungeonsForProBuilderEditor
                 {
                     ResetDoor(existingDoorOp, existingDoorMesh);
                     
-                    // After reset, use this mesh as the active door mesh while preserving its hierarchy
+                    // Move the Door Mesh back to root
+                    Undo.SetTransformParent(existingDoorMesh.transform, null, "Reset Door");
+                    
+                    // Store the existing prefab for reuse
+                    StoreDoorPrefabForRebuild(existingDoorOp.gameObject, existingDoorMesh);
+                    storedDoorPrefabTransform = existingDoorMesh.transform.Find("Stored Door Prefab");
+                    storedDoorPrefab = storedDoorPrefabTransform != null ? storedDoorPrefabTransform.gameObject : null;
+                    
+                    // Now the doorMesh we were going to use needs to reference this reset mesh
                     doorMesh = existingDoorMesh.GetComponent<ProBuilderMesh>();
-                    originalParent = doorMesh.transform.parent;
-                    originalSiblingIndex = doorMesh.transform.GetSiblingIndex();
-                    originalDoorName = doorMesh.gameObject.name;
                 }
             }
             
@@ -2190,42 +2318,67 @@ namespace DungeonsForProBuilderEditor
                 Undo.RegisterCompleteObjectUndo(wall, "Build Door");
             }
             
+            // Determine door name based on overlapping wall directions
+            string doorName = "Door";
+            if (overlappingWalls.Length > 0)
+            {
+                var firstWallComponent = overlappingWalls[0].GetComponent<RoomWall>();
+                if (firstWallComponent != null)
+                {
+                    doorName = firstWallComponent.direction.ToString() + " Door";
+                }
+            }
+            
+            // Get or create "Doors" GameObject at root level
+            GameObject doorsContainer = GameObject.Find("Doors");
+            if (doorsContainer == null)
+            {
+                doorsContainer = new GameObject("Doors");
+                Undo.RegisterCreatedObjectUndo(doorsContainer, "Build Door");
+            }
+            
             // Create or reuse the parent GameObject structure
             GameObject doorParent;
             
-            if (currentSettings != null && currentSettings.doorPrefab != null)
+            if (storedDoorPrefab != null)
+            {
+                Undo.RecordObject(storedDoorPrefab, "Build Door");
+                doorParent = storedDoorPrefab;
+                doorParent.name = doorName;
+                doorParent.transform.position = doorMesh.transform.position;
+                doorParent.transform.rotation = doorMesh.transform.rotation;
+                doorParent.SetActive(true);
+                Undo.SetTransformParent(doorParent.transform, doorsContainer.transform, "Build Door");
+            }
+            else if (currentSettings != null && currentSettings.doorPrefab != null)
             {
                 // Instantiate the door prefab as the parent
                 doorParent = (GameObject)PrefabUtility.InstantiatePrefab(currentSettings.doorPrefab);
-                doorParent.name = originalDoorName;
+                doorParent.name = doorName;
                 doorParent.transform.position = doorMesh.transform.position;
                 doorParent.transform.rotation = doorMesh.transform.rotation;
-                doorParent.transform.SetParent(originalParent);
-                doorParent.transform.SetSiblingIndex(originalSiblingIndex);
+                doorParent.transform.SetParent(doorsContainer.transform);
                 Undo.RegisterCreatedObjectUndo(doorParent, "Build Door");
             }
             else
             {
                 // Create a new parent GameObject
-                doorParent = new GameObject(originalDoorName);
+                doorParent = new GameObject(doorName);
                 doorParent.transform.position = doorMesh.transform.position;
                 doorParent.transform.rotation = doorMesh.transform.rotation;
-                doorParent.transform.SetParent(originalParent);
-                doorParent.transform.SetSiblingIndex(originalSiblingIndex);
+                doorParent.transform.SetParent(doorsContainer.transform);
                 Undo.RegisterCreatedObjectUndo(doorParent, "Build Door");
             }
             
             // Add DoorOperation component to the parent
             var doorOperation = doorParent.AddComponent<DoorOperation>();
             Undo.RegisterCreatedObjectUndo(doorOperation, "Build Door");
-            doorOperation.originalParent = originalParent;
-            doorOperation.originalSiblingIndex = originalSiblingIndex;
-            doorOperation.originalDoorName = originalDoorName;
             
             // Make the door mesh a child and rename it to "Door Mesh"
             Undo.SetTransformParent(doorMesh.transform, doorParent.transform, "Build Door");
             doorMesh.transform.localPosition = Vector3.zero;
             doorMesh.transform.localRotation = Quaternion.identity;
+            doorMesh.gameObject.name = "Door Mesh";
             
             // Perform the door operation (before disabling collider - boolean op might need it)
             if (PerformDoorOperation(doorOperation, doorMesh, overlappingWalls))
@@ -2313,26 +2466,13 @@ namespace DungeonsForProBuilderEditor
                 return;
             }
             
-            // Reset the door operation (restores walls, renderer, collider, etc.)
             ResetDoor(doorOperation, doorMesh);
             
-            // Preserve the CURRENT hierarchy and name of the door parent.
-            // This way, if the user has moved/renamed the door parent since it was built,
-            // a reset will keep it in the same place in the hierarchy with the same name.
-            Transform restoreParent = doorParent.transform.parent;
-            int restoreSiblingIndex = doorParent.transform.GetSiblingIndex();
-            string restoreName = doorParent.name;
+            // Move the Door Mesh back to root
+            Undo.SetTransformParent(doorMesh.transform, null, "Reset Door");
             
-            // Move the mesh out of the door container and into the preserved location.
-            Undo.SetTransformParent(doorMesh.transform, restoreParent, "Reset Door");
-            doorMesh.transform.SetSiblingIndex(restoreSiblingIndex);
-            doorMesh.gameObject.name = restoreName;
-            
-            // Destroy the container parent that was created for the door
-            if (doorParent != null)
-            {
-                Undo.DestroyObjectImmediate(doorParent);
-            }
+            // Store the previous prefab as a disabled child for reuse
+            StoreDoorPrefabForRebuild(doorParent, doorMesh);
             
             // Select the ProBuilder mesh
             Selection.activeGameObject = doorMesh;
@@ -2431,8 +2571,32 @@ namespace DungeonsForProBuilderEditor
 #endif
         }
         
-        // StoreDoorPrefabForRebuild is no longer used; door builds now preserve the
-        // original hierarchy and do not rely on a hidden stored prefab.
+        private void StoreDoorPrefabForRebuild(GameObject doorParent, GameObject doorMesh)
+        {
+            if (doorParent == null || doorMesh == null) return;
+            if (doorParent == doorMesh) return;
+            
+            // Ensure any DoorOperation component is removed
+            var existingDoorOp = doorParent.GetComponent<DoorOperation>();
+            if (existingDoorOp != null)
+            {
+                Undo.DestroyObjectImmediate(existingDoorOp);
+            }
+            
+            // Re-parent the prefab under the door mesh and disable it for reuse
+            Undo.RecordObject(doorParent.transform, "Reset Door");
+            Undo.SetTransformParent(doorParent.transform, doorMesh.transform, "Reset Door");
+            doorParent.transform.localPosition = Vector3.zero;
+            doorParent.transform.localRotation = Quaternion.identity;
+            doorParent.transform.localScale = Vector3.one;
+            doorParent.name = "Stored Door Prefab";
+            doorParent.SetActive(false);
+            
+#if UNITY_EDITOR
+            EditorUtility.SetDirty(doorParent);
+            EditorUtility.SetDirty(doorMesh);
+#endif
+        }
         
         /// <summary>
         /// Rebuilds a door operation when it's moved
@@ -3487,17 +3651,6 @@ namespace DungeonsForProBuilderEditor
             {
                 return false;
             }
-
-            // Get floor bounds so we can treat the floor as a thin visual surface,
-            // regardless of how thick its collider actually is.
-            var floorRenderer = roomFloorObject.GetComponent<Renderer>();
-            Bounds floorBounds = floorRenderer != null ? floorRenderer.bounds : new Bounds(roomFloorObject.transform.position, Vector3.zero);
-            float floorTopY = floorBounds.max.y;
-            // Limit the effective collision thickness used for \"overlap\" checks.
-            // Even if the actual floor is very thick, we only consider hits in the
-            // top slice of the collider as true visual overlaps.
-            float effectiveFloorThickness = 0.25f;
-            float effectiveFloorMinY = floorTopY - effectiveFloorThickness;
             
             // Calculate wall corners
             Vector3 bottomA = wall.start;
@@ -3517,24 +3670,6 @@ namespace DungeonsForProBuilderEditor
             float topPadding = Mathf.Min(padding, wallHeight * 0.4f);
             Vector3 paddedTopA = topA - Vector3.up * topPadding;
             Vector3 paddedTopB = topB - Vector3.up * topPadding;
-
-            // Ensure the entire sampled wall area starts just above the visible top of the floor,
-            // regardless of floor thickness. Without this, increasing floor height can cause
-            // the lower part of the sampling rectangle to sit inside the floor volume.
-            float minPaddedBottomY = Mathf.Min(paddedBottomA.y, paddedBottomB.y);
-            float desiredMinY = floorTopY + 0.1f; // small clearance above the floor surface
-            if (minPaddedBottomY < desiredMinY)
-            {
-                float lift = desiredMinY - minPaddedBottomY;
-                paddedBottomA += Vector3.up * lift;
-                paddedBottomB += Vector3.up * lift;
-                paddedTopA += Vector3.up * lift;
-                paddedTopB += Vector3.up * lift;
-
-                LogDebug(
-                    $"[BackWallRaySetup] wallIndex={wallIndex}, lifted sample area by {lift:F3} so " +
-                    $"bottomY from {minPaddedBottomY:F3} to {desiredMinY:F3}, floorTopY={floorTopY:F3}");
-            }
             
             // Left/Right padding: inset 2 units from each end along the wall
             float horizontalPadding = Mathf.Min(padding, wall.length * 0.4f);
@@ -3589,23 +3724,8 @@ namespace DungeonsForProBuilderEditor
                         // Check if hit object is THIS room's floor specifically
                         if (hit.collider.gameObject == roomFloorObject)
                         {
-                            // Only treat this as an overlap if the hit point lies within the
-                            // effective top slice of the floor, so that thicker floors
-                            // don't unfairly classify more walls as \"front\".
-                            if (hit.point.y >= effectiveFloorMinY && hit.point.y <= floorTopY + 0.01f)
-                            {
-                                hitFloor = true;
-
-                                // Optional detailed debug to understand why a wall is classified as front/back.
-                                // This is gated by the Debug Logs toggle to avoid log spam.
-                                LogDebug(
-                                    $"[BackWallRay] wallIndex={wallIndex}, " +
-                                    $"sample(h={h}/{horizontalSamples - 1}, v={v}/{verticalSamples - 1}), " +
-                                    $"hitPoint={hit.point}, floorTopY={floorTopY:F3}, " +
-                                    $"effectiveYRange=[{effectiveFloorMinY:F3}, {floorTopY + 0.01f:F3}]");
-
-                                break;
-                            }
+                            hitFloor = true;
+                            break;
                         }
                     }
                     

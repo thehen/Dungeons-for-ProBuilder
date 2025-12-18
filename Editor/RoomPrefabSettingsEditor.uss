@@ -48,6 +48,6 @@
     width: 20px;
 }
 
-.row .unity-layer-field__label {
+.row .unity-layer-field__label, .row .unity-label {
     min-width:50px;
 }

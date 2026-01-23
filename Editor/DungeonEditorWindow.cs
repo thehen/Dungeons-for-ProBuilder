@@ -1243,6 +1243,9 @@ namespace DungeonsForProBuilderEditor
             // Set layer
             go.layer = currentSettings.floorLayer;
             
+            // Mark as static for optimization (lightmapping, batching, etc.) - set all static flags
+            GameObjectUtility.SetStaticEditorFlags(go, (StaticEditorFlags)(-1));
+            
             return go;
         }
         
@@ -1325,6 +1328,9 @@ namespace DungeonsForProBuilderEditor
 
             // Set layer
             go.layer = currentSettings.wallsLayer;
+            
+            // Mark as static for optimization (lightmapping, batching, etc.) - set all static flags
+            GameObjectUtility.SetStaticEditorFlags(go, (StaticEditorFlags)(-1));
             
             return go;
         }
@@ -1423,6 +1429,9 @@ namespace DungeonsForProBuilderEditor
             // Set layer
             go.layer = currentSettings.ceilingLayer;
             
+            // Mark as static for optimization (lightmapping, batching, etc.) - set all static flags
+            GameObjectUtility.SetStaticEditorFlags(go, (StaticEditorFlags)(-1));
+            
             return go;
         }
         
@@ -1505,6 +1514,9 @@ namespace DungeonsForProBuilderEditor
             
             // Set layer
             go.layer = currentSettings.cornersLayer;
+            
+            // Mark as static for optimization (lightmapping, batching, etc.) - set all static flags
+            GameObjectUtility.SetStaticEditorFlags(go, (StaticEditorFlags)(-1));
             
             return go;
         }
